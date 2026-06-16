@@ -1,0 +1,46 @@
+# p0ly-flow configuration
+# Anchors: SCHEMA.md §4
+
+project_settings:
+  experiment_name: "p0ly_bootstrap"
+  input_format: "BrainVision"       # BrainVision | BIDS | EDF
+  data_directory: "data/raw/"
+  output_directory: "data/derivatives/"
+
+subjects:
+  - "001"                            # Bootstrap: single placeholder subject (bare ID)
+
+preprocessing:
+  l_freq: 0.1
+  h_freq: 45.0
+  bad_channel_z_thresh: 2.5
+  ica_strategy: "mne-icalabel"      # find_bads_eog | mne-icalabel
+  icalabel_threshold: 0.75
+  epoch_window_ms: 500
+  epoch_reject_uV: 100e-6
+
+epoching:
+  tmin: -0.2
+  tmax: 1.0
+  baseline: [-0.2, 0.0]
+  event_ids:
+    11: "target/valid/left"
+    12: "target/valid/right"
+
+metadata:
+  custom_parser_script: "scripts/parse_metadata.py"
+
+group_aggregation:
+  cohort_file: "data/metadata/participants.tsv"
+  aggregate_by_cohorts: ["control", "patient", "all_combined"]
+  condition_splits:
+    correct_trials: "Correct == True"
+    incorrect_trials: "Correct == False"
+
+analysis:
+  run_erp: false
+  run_psd: false
+  run_connectivity: false
+  run_cfc: false
+  run_regression: false
+  run_decoding: false
