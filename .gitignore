@@ -1,0 +1,10 @@
+# Snakemake artifacts
+.snakemake/
+
+# Ruff cache
+.ruff_cache/
+
+# Input / output data (version externally)
+data/*
+!data/raw/
+logs/
