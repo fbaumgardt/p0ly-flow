@@ -657,6 +657,20 @@ wheels = [
 ]
 
 [[package]]
+name = "mne-bids"
+version = "0.19.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mne" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/e9/42/6ddd792c209070c67125a6fd2fb82024cfb4e9eeda507cd59f3cfb4e6a44/mne_bids-0.19.0.tar.gz", hash = "sha256:4166c3ad5afa81f4943d675cdc7e0b90efea6fb470373e667eb93579e18f2409", size = 151834, upload-time = "2026-05-26T18:15:41.493Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/3f/1d/e2c940f8bd8ef0cb2d32d039bd2537ff96d31c17acb643b6f1480a73da8a/mne_bids-0.19.0-py3-none-any.whl", hash = "sha256:2ee6631115fef654e1d0f6c0fb52b99a4f808418c51b36c000ac46933b6e31d3", size = 189809, upload-time = "2026-05-26T18:15:39.835Z" },
+]
+
+[[package]]
 name = "mne-icalabel"
 version = "0.9.0"
 source = { registry = "https://pypi.org/simple" }
@@ -807,6 +821,7 @@ version = "0.1.0"
 source = { directory = "../p0ly-eeg" }
 dependencies = [
     { name = "mne" },
+    { name = "mne-bids" },
     { name = "mne-icalabel" },
     { name = "numpy" },
     { name = "onnxruntime" },
@@ -817,6 +832,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "mne", specifier = ">=1.12.1" },
+    { name = "mne-bids", specifier = ">=0.16" },
     { name = "mne-icalabel", specifier = ">=0.9.0" },
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "onnxruntime", specifier = ">=1.26.0" },
@@ -830,6 +846,7 @@ dev = [
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "pandas-stubs" },
     { name = "pre-commit", specifier = ">=4.0.0" },
+    { name = "pybv", specifier = ">=0.7" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
     { name = "ruff", specifier = ">=0.15.14" },
