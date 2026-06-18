@@ -2,4 +2,16 @@ name: p0ly-flow
 channels:
   - conda-forge
 dependencies:
+  # Documentation of the per-rule software stack. Runtime uses the uv venv
+  # (managed via pyproject.toml + the sibling p0ly-eeg path source) unless
+  # --use-conda is passed. Kept here so `snakemake --lint` can verify that each
+  # rule documents its software, and so the workflow is portable to conda-only
+  # environments.
   - python>=3.13
+  - mne>=1.12
+  - mne-bids>=0.16
+  - mne-icalabel>=0.9
+  - pybv>=0.7
+  - pip
+  - pip:
+      - p0ly-utils @ file://../p0ly-eeg

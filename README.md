@@ -5,13 +5,12 @@ Snakemake orchestration pipeline for p0ly EEG analysis.
 ## Quick Start
 
 ```bash
-# Install (including p0ly-utils from sibling directory)
-uv add --path ../p0ly-eeg
+# Install (resolves p0ly-utils from the sibling p0ly-eeg via path source)
 uv sync
 
 # Validate
-snakemake -n
-snakemake --lint
+uv run snakemake -n
+uv run snakemake --lint
 ```
 
 ## See Also

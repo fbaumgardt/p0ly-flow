@@ -77,7 +77,7 @@ Translate [PRD_Core_App.md](../scrum/04_Specs/PRD_Core_App.md) into an optimized
 ### Future (when infrastructure exists)
 
 - Maintain `config.schema.yaml` (JSON Schema)
-- Run `snakemake --config-schema validate` before committing
+- Run `uv run snakemake --config-schema validate` before committing
 - Maintain `config.test.yaml` smoke test (1–2 subjects, under 60 seconds)
 
 ---
@@ -87,7 +87,7 @@ Translate [PRD_Core_App.md](../scrum/04_Specs/PRD_Core_App.md) into an optimized
 When p0ly-eeg is updated:
 
 - Pin version in `pyproject.toml`
-- Run `snakemake -n` after dependency bump to surface broken imports
+- Run `uv run snakemake -n` after dependency bump to surface broken imports
 - Update rule scripts to match new API before dry-run passes
 
 ---
@@ -100,7 +100,7 @@ When p0ly-eeg is updated:
 2. `config.yaml` — default config matching [SCHEMA](../scrum/04_Specs/SCHEMA.md)
 3. `Snakefile` — `rule all` + at least one placeholder rule
 4. `scripts/` — one thin wrapper importing from `p0ly_utils`
-5. Verify: `snakemake -n` and `snakemake --lint` pass
+5. Verify: `uv run snakemake -n` and `uv run snakemake --lint` pass
 
 See user story [US-006_pipeline-bootstrap](../scrum/01_Backlog/US-006_pipeline-bootstrap.md).
 
@@ -110,12 +110,12 @@ See user story [US-006_pipeline-bootstrap](../scrum/01_Backlog/US-006_pipeline-b
 
 ### Day 1 gates (required now)
 
-- `snakemake -n` — zero `MissingRuleException`, `AmbiguousRuleException`, `WorkflowError`
-- `snakemake --lint` — zero issues
+- `uv run snakemake -n` — zero `MissingRuleException`, `AmbiguousRuleException`, `WorkflowError`
+- `uv run snakemake --lint` — zero issues
 
 ### Future gates (when infrastructure exists)
 
-- `snakemake --config-schema validate`
+- `uv run snakemake --config-schema validate`
 - Integration smoke test with `config.test.yaml`
 - Unit tests for branching logic in rule scripts via `uv run pytest tests/`
 
