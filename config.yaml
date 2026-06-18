@@ -3,9 +3,11 @@
 
 project_settings:
   experiment_name: "p0ly_bootstrap"
-  input_format: "BrainVision"       # BrainVision | BIDS | EDF
-  data_directory: "data/raw/"
+  input_format: "BrainVision"       # BrainVision | BIDS
+  data_directory: "data/raw/"       # BV: root with sub-{id}/ dirs; BIDS: BIDS dataset root
   output_directory: "data/derivatives/"
+  task: "rest"                      # task label: embedded in BV filenames + BIDS entity
+  montage: "easycap-M1"             # MNE builtin montage applied on ingestion
 
 subjects:
   - "001"                            # Bootstrap: single placeholder subject (bare ID)
