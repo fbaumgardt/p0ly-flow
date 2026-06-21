@@ -13,13 +13,14 @@ subjects:
   - "001"                            # Bootstrap: single placeholder subject (bare ID)
 
 preprocessing:
+  # All keys optional — omit a key to skip that step (see SCHEMA §preprocessing / ADR-004).
   l_freq: 0.1
   h_freq: 45.0
   bad_channel_z_thresh: 2.5
   ica_strategy: "mne-icalabel"      # find_bads_eog | mne-icalabel
   icalabel_threshold: 0.75
   epoch_window_ms: 500
-  epoch_reject_uV: 100e-6
+  epoch_reject_z_thresh: 3.0      # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
 
 epoching:
   tmin: -0.2
