@@ -10,6 +10,27 @@ _OUT_DIR = config["project_settings"]["output_directory"].rstrip("/")
 _TASK = config["project_settings"]["task"]
 _FMT = config["project_settings"]["input_format"]
 
+# Preprocessing config (US-008). All keys optional; ica_strategy present =>
+# the preprocess rule also emits a fitted-ICA sidecar (see _ICA_OUT below).
+_PP = config["preprocessing"]
+_ICA_ENABLED = _PP.get("ica_strategy") is not None
+
+# Optional ICA output path (declared as a plain value, not a function —
+# Snakemake only allows callables for `input:`, not `output:`). Empty list
+# when ICA is disabled so the rule emits no ICA file in that case.
+_ICA_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-ica.fif.gz"
+    if _ICA_ENABLED
+    else []
+)
+
+# `rule all` ICA target expansion (empty list when ICA disabled).
+_ICA_TARGETS = (
+    expand(_ICA_OUT, subject=config["subjects"])
+    if _ICA_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+"
@@ -43,7 +64,13 @@ rule all:
             f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif",
             subject=config["subjects"],
         ),
-        # US-008 will re-add the metadata target once inject_metadata is wired.
+        expand(
+            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
+            subject=config["subjects"],
+        ),
+        # ICA sidecar target only when ICA is enabled in config (US-008).
+        _ICA_TARGETS,
+        # US-016 will re-add the metadata target once inject_metadata is wired.
 
 
 # --- Ingestion Layer (US-007) ---
@@ -70,13 +97,48 @@ rule raw_ingestion:
         "scripts/ingest_raw.py"
 
 
-# --- Metadata Layer (placeholder — US-008) ---
-rule inject_metadata:
-    """Inject trial metadata. Implementation placeholder (US-008)."""
+# --- Preprocessing Layer (US-008) ---
+rule preprocess:
+    """Continuous-data preprocessing on un-segmented raw.
+
+    Chains filter -> bad-channels -> ICA -> sliding-window reject in a single
+    rule (PRD Core App §3 stage 2) so that any change to a preprocessing
+    parameter recomputes the whole subject without exploding intermediate FIF
+    checkpoints. All tunables arrive from config['preprocessing'] via
+    snakemake.params; the rule body holds no math — algorithms live in
+    p0ly_utils.preprocessing.
+
+    Outputs:
+      - sub-{subject}_desc-clean-raw.fif.gz : cleaned continuous raw carrying
+        bad-interval Annotations (consumed by the downstream `epoch` rule).
+      - bad_channels.json : pre-interpolation flagged channels + ica_strategy +
+        ICA component-exclusion summary (``n_components``/``exclude``/``method``).
+      - sub-{subject}_desc-ica.fif.gz : fitted ICA object, emitted only when
+        `ica_strategy` is set in config (optional output via _ica_output).
+    """
     conda:
         "envs/snakemake.yaml"
     input:
         raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif",
+    output:
+        raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
+        bads=f"{_OUT_DIR}/sub-{{subject}}/bad_channels.json",
+        ica=_ICA_OUT,
+    params:
+        pp=config["preprocessing"],
+    log:
+        "logs/sub-{subject}/preprocess.log",
+    script:
+        "scripts/preprocess.py"
+
+
+# --- Metadata Layer (placeholder — US-016) ---
+rule inject_metadata:
+    """Inject trial metadata. Implementation placeholder (US-016)."""
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
     output:
         f"{_OUT_DIR}/sub-{{subject}}/metadata.tsv",
     params:
