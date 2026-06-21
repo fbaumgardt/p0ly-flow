@@ -805,7 +805,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "p0ly-utils", directory = "../p0ly-eeg" },
+    { name = "p0ly-utils", editable = "../p0ly-eeg" },
     { name = "snakemake", specifier = ">=9.0" },
 ]
 
@@ -818,7 +818,7 @@ dev = [
 [[package]]
 name = "p0ly-utils"
 version = "0.1.0"
-source = { directory = "../p0ly-eeg" }
+source = { editable = "../p0ly-eeg" }
 dependencies = [
     { name = "mne" },
     { name = "mne-bids" },
@@ -826,6 +826,7 @@ dependencies = [
     { name = "numpy" },
     { name = "onnxruntime" },
     { name = "pandas" },
+    { name = "pyyaml" },
     { name = "scikit-learn" },
 ]
 
@@ -837,6 +838,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=2.4.6" },
     { name = "onnxruntime", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=3.0.3" },
+    { name = "pyyaml", specifier = ">=6.0" },
     { name = "scikit-learn", specifier = ">=1.9.0" },
 ]
 

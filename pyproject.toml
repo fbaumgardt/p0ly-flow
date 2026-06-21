@@ -16,7 +16,7 @@ dependencies = [
 package = false
 
 [tool.uv.sources]
-p0ly-utils = { path = "../p0ly-eeg" }
+p0ly-utils = { path = "../p0ly-eeg", editable = true }
 
 [dependency-groups]
 dev = [
