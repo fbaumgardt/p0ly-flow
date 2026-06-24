@@ -19,6 +19,14 @@ _ICA_ENABLED = _PP.get("ica_strategy") is not None
 # extraction; csv_columns and expand_trials are optional companions.
 _META = config["metadata"]
 
+# US-017: the timelock set is derived from the experiment spec itself
+# (``ExperimentSpec.timelocks`` keys) so no timelock literals live in the
+# Snakefile. ``p0ly_utils`` is already a dependency, so the spec is loaded at
+# DAG-parse time.
+from p0ly_utils.metadata import ExperimentSpec
+
+_TIMELOCKS = list(ExperimentSpec.from_yaml(_META["experiment_spec"]).timelocks.keys())
+
 # Optional ICA output path (declared as a plain value, not a function —
 # Snakemake only allows callables for `input:`, not `output:`). Empty list
 # when ICA is disabled so the rule emits no ICA file in that case.
@@ -37,7 +45,8 @@ _ICA_TARGETS = (
 
 # --- Wildcard Constraints ---
 wildcard_constraints:
-    subject = r"\d+"
+    subject = r"\d+",
+    timelock = r"[a-z]+"
 
 
 # --- Ingestion input resolver ---
@@ -65,7 +74,7 @@ def _ingest_inputs(subject: str) -> str | list[str]:
 rule all:
     input:
         expand(
-            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif",
+            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif.gz",
             subject=config["subjects"],
         ),
         expand(
@@ -79,20 +88,31 @@ rule all:
             f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_metadata.tsv",
             subject=config["subjects"],
         ),
+        # US-017: per-(subject × timelock) epochs + excluded-trials sidecar.
+        expand(
+            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+            subject=config["subjects"],
+            timelock=_TIMELOCKS,
+        ),
+        expand(
+            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_excluded_trials.csv",
+            subject=config["subjects"],
+            timelock=_TIMELOCKS,
+        ),
 
 
 # --- Ingestion Layer (US-007) ---
 rule raw_ingestion:
     """Ingest raw EEG per input_format via p0ly_utils.io.load_raw.
 
-    Output follows BIDS-style naming: sub-{subject}_desc-raw.fif
+    Output follows BIDS-style naming: sub-{subject}_desc-raw.fif.gz
     """
     conda:
         "envs/snakemake.yaml"
     input:
         paths=lambda wildcards: _ingest_inputs(wildcards.subject),
     output:
-        f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif",
+        f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif.gz",
     params:
         fmt=_FMT,
         subject="{subject}",
@@ -127,7 +147,7 @@ rule preprocess:
     conda:
         "envs/snakemake.yaml"
     input:
-        raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif",
+        raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif.gz",
     output:
         raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
         bads=f"{_OUT_DIR}/sub-{{subject}}/bad_channels.json",
@@ -170,3 +190,48 @@ rule inject_metadata:
         "logs/sub-{subject}/inject_metadata.log",
     script:
         "scripts/parse_metadata.py"
+
+
+# --- Epoching Layer (US-017) ---
+rule epoch:
+    """Segment each subject's clean continuous raw into per-timelock epochs.
+
+    Cuts ``mne.Epochs`` from the timelock's annotation events using the spec's
+    ``intervals[timelock]`` -> ``(tmin, tmax)`` and the shared ``baseline``
+    (``config.yaml`` ``epoching.baseline``), then aligns the US-016 by-trial
+    metadata TSV to those epochs via
+    ``p0ly_utils.epoching.epoch_with_metadata``. Mismatches (extra epochs,
+    missing epochs, bad-interval drops) are written to the per-timelock
+    ``excluded_trials.csv`` sidecar (SCHEMA §6) rather than silently dropped.
+    The ``{timelock}`` wildcard propagates to downstream cohort/condition /
+    analysis rules (PRD §3).
+
+    Inputs:
+      - sub-{subject}_desc-clean-raw.fif.gz : US-008 cleaned continuous raw
+        carrying event-marker + bad-interval Annotations.
+      - sub-{subject}_metadata.tsv : US-016 by-trial metadata.
+    Outputs:
+      - sub-{subject}_{timelock}_desc-epo.fif.gz : epochs with aligned metadata.
+      - sub-{subject}_{timelock}_excluded_trials.csv : mismatch log.
+
+    The timelock set comes from the experiment spec (``_TIMELOCKS`` above), not
+    config literals; per-timelock ``(tmin, tmax)`` come from the spec, not
+    config. No segmentation/alignment math here -- algorithms live in p0ly-eeg.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
+        metadata=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_metadata.tsv",
+    output:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+        excluded=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_excluded_trials.csv",
+    params:
+        spec_path=_META["experiment_spec"],
+        baseline=config["epoching"]["baseline"],
+        timelock="{timelock}",
+        expand_trials=_META.get("expand_trials", False),
+    log:
+        "logs/sub-{subject}/epoch_{timelock}.log",
+    script:
+        "scripts/epoch.py"

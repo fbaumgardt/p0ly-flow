@@ -23,12 +23,10 @@ preprocessing:
   epoch_reject_z_thresh: 3.0      # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
 
 epoching:
-  tmin: -0.2
-  tmax: 1.0
+  # Time-locks and per-timelock (tmin, tmax) intervals come from the
+  # experiment spec (ExperimentSpec.timelocks / .intervals), not config (US-017).
+  # Only the shared baseline window lives here (SCHEMA §4).
   baseline: [-0.2, 0.0]
-  event_ids:
-    11: "target/valid/left"
-    12: "target/valid/right"
 
 metadata:
   # SCHEMA §4: path to the experiment metadata YAML spec. Specs live in
