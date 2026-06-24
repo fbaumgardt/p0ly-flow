@@ -15,6 +15,10 @@ _FMT = config["project_settings"]["input_format"]
 _PP = config["preprocessing"]
 _ICA_ENABLED = _PP.get("ica_strategy") is not None
 
+# Metadata config (US-016). The experiment spec drives trial/Block/Onset
+# extraction; csv_columns and expand_trials are optional companions.
+_META = config["metadata"]
+
 # Optional ICA output path (declared as a plain value, not a function —
 # Snakemake only allows callables for `input:`, not `output:`). Empty list
 # when ICA is disabled so the rule emits no ICA file in that case.
@@ -70,7 +74,11 @@ rule all:
         ),
         # ICA sidecar target only when ICA is enabled in config (US-008).
         _ICA_TARGETS,
-        # US-016 will re-add the metadata target once inject_metadata is wired.
+        # US-016: per-subject trial metadata TSV (input to the epoch rule).
+        expand(
+            f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_metadata.tsv",
+            subject=config["subjects"],
+        ),
 
 
 # --- Ingestion Layer (US-007) ---
@@ -132,17 +140,32 @@ rule preprocess:
         "scripts/preprocess.py"
 
 
-# --- Metadata Layer (placeholder — US-016) ---
+# --- Metadata Layer (US-016) ---
 rule inject_metadata:
-    """Inject trial metadata. Implementation placeholder (US-016)."""
+    """Compute by-trial metadata from the cleaned raw's event-marker Annotations.
+
+    Reads the cleaned continuous raw (US-008 output) — which carries the
+    Psychtoolbox Stim Annotations and recomputes whenever preprocessing changes
+    — extracts the event frame, and runs ``p0ly_utils.metadata.parse_metadata``
+    against the experiment spec referenced by ``config.yaml``
+    ``metadata.experiment_spec``. Writes a per-subject TSV (SCHEMA §6:
+    ``sub-{subject}_metadata.tsv``).
+
+    Metadata only: this rule does not epoch or bind metadata to ``mne.Epochs``
+    (that is US-017). The spec path, optional companion CSV, and trial-expansion
+    flag all arrive from ``config['metadata']`` via ``snakemake.params`` — no
+    hardcoded experiment names.
+    """
     conda:
         "envs/snakemake.yaml"
     input:
         raw=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-clean-raw.fif.gz",
     output:
-        f"{_OUT_DIR}/sub-{{subject}}/metadata.tsv",
+        f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_metadata.tsv",
     params:
-        parser=config["metadata"]["custom_parser_script"],
+        spec_path=_META["experiment_spec"],
+        csv_columns=_META.get("csv_columns"),
+        expand_trials=_META.get("expand_trials", False),
     log:
         "logs/sub-{subject}/inject_metadata.log",
     script:

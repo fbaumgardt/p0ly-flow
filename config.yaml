@@ -31,7 +31,14 @@ epoching:
     12: "target/valid/right"
 
 metadata:
-  custom_parser_script: "scripts/parse_metadata.py"
+  # SCHEMA §4: path to the experiment metadata YAML spec. Specs live in
+  # metadata/specs/{experiment}.yaml (copied from p0ly-eeg to keep the pipeline
+  # self-contained; treat p0ly-eeg/src/p0ly_utils/metadata/specs as upstream).
+  experiment_spec: "metadata/specs/dmss.yaml"
+  # Optional companion CSV aligned positionally to trials (see ExperimentSpec.csv_columns).
+  csv_columns: null
+  # One row per selection for experiments with ExperimentSpec.trial_expander (e.g. IGT).
+  expand_trials: false
 
 group_aggregation:
   cohort_file: "data/metadata/participants.tsv"
