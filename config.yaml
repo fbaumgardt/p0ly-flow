@@ -14,13 +14,13 @@ subjects:
 
 preprocessing:
   # All keys optional — omit a key to skip that step (see SCHEMA §preprocessing / ADR-004).
-  l_freq: 0.1
-  h_freq: 45.0
+  l_freq: 1.0
+  h_freq: 100.0
   bad_channel_z_thresh: 2.5
-  ica_strategy: "mne-icalabel"      # find_bads_eog | mne-icalabel
-  icalabel_threshold: 0.75
-  epoch_window_ms: 500
-  epoch_reject_z_thresh: 3.0      # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
+  interval_reject_z_thresh: 3.0
+  interval_window_ms: 500
+  ica_strategy: "mne-icalabel" # find_bads_eog | mne-icalabel
+  icalabel_threshold: 0.75 # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
 
 epoching:
   # Time-locks and per-timelock (tmin, tmax) intervals come from the
