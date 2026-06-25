@@ -196,9 +196,10 @@ rule inject_metadata:
 rule epoch:
     """Segment each subject's clean continuous raw into per-timelock epochs.
 
-    Cuts ``mne.Epochs`` from the timelock's annotation events using the spec's
-    ``intervals[timelock]`` -> ``(tmin, tmax)`` and the shared ``baseline``
-    (``config.yaml`` ``epoching.baseline``), then aligns the US-016 by-trial
+    Cuts ``mne.Epochs`` from the timelock's annotation events using the
+    analysis-run ``intervals[timelock]`` -> ``(tmin, tmax)`` (from
+    ``config.yaml epoching.intervals``, ADR-006) and the shared ``baseline``
+    (``config.yaml epoching.baseline``), then aligns the US-016 by-trial
     metadata TSV to those epochs via
     ``p0ly_utils.epoching.epoch_with_metadata``. Mismatches (extra epochs,
     missing epochs, bad-interval drops) are written to the per-timelock
@@ -214,9 +215,11 @@ rule epoch:
       - sub-{subject}_{timelock}_desc-epo.fif.gz : epochs with aligned metadata.
       - sub-{subject}_{timelock}_excluded_trials.csv : mismatch log.
 
-    The timelock set comes from the experiment spec (``_TIMELOCKS`` above), not
-    config literals; per-timelock ``(tmin, tmax)`` come from the spec, not
-    config. No segmentation/alignment math here -- algorithms live in p0ly-eeg.
+    The timelock set comes from the experiment spec (``_TIMELOCKS`` above),
+    not config literals; per-timelock ``(tmin, tmax)`` come from
+    ``config.yaml epoching.intervals`` (ADR-006: windows are analysis-run
+    config; the spec owns the event-code map only).  No segmentation/
+    alignment math here -- algorithms live in p0ly-eeg.
     """
     conda:
         "envs/snakemake.yaml"
@@ -229,6 +232,7 @@ rule epoch:
     params:
         spec_path=_META["experiment_spec"],
         baseline=config["epoching"]["baseline"],
+        intervals=config["epoching"]["intervals"],
         timelock="{timelock}",
         expand_trials=_META.get("expand_trials", False),
     log:

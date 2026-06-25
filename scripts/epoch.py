@@ -16,7 +16,7 @@ first statement (flagged #2, discovered during US-007).
 
 import mne
 import pandas as pd
-from p0ly_utils.epoching import epoch_with_metadata
+from p0ly_utils.epoching import epoch_with_metadata, validate_intervals
 from p0ly_utils.metadata import ExperimentSpec
 
 p = snakemake.params  # type: ignore[name-defined]
@@ -25,12 +25,20 @@ raw = mne.io.read_raw(snakemake.input.raw, preload=True)  # type: ignore[name-de
 metadata = pd.read_csv(snakemake.input.metadata, sep="\t")  # type: ignore[name-defined]
 spec = ExperimentSpec.from_yaml(p.spec_path)
 
+# ADR-006: epoch windows come from config epoching.intervals (analysis-run
+# config), the spec carries the timelock event-code map only. Cross-check the
+# keys asymmetrically: warn on spec-extra (legitimate skip), error on
+# config-extra (likely typo).
+validate_intervals(spec.timelocks, p.intervals, timelock=p.timelock)
+interval = p.intervals[p.timelock]
+
 epochs, excluded = epoch_with_metadata(
     raw,
     spec,
     p.timelock,
     metadata,
-    baseline=p.baseline,
+    p.baseline,
+    interval=interval,
     subject=snakemake.wildcards.subject,  # type: ignore[name-defined]
 )
 

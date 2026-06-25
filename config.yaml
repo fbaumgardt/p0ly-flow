@@ -23,9 +23,16 @@ preprocessing:
   icalabel_threshold: 0.75 # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
 
 epoching:
-  # Time-locks and per-timelock (tmin, tmax) intervals come from the
-  # experiment spec (ExperimentSpec.timelocks / .intervals), not config (US-017).
-  # Only the shared baseline window lives here (SCHEMA §4).
+  # Per-timelock (tmin, tmax) epoch windows — analysis-run config (ADR-006).
+  # The spec (metadata.experiment_spec) owns the timelock event-code map only;
+  # keys here MUST match the spec's timelock keys (validate_intervals errors on
+  # a config-side typo, warns if the spec declares a timelock not run here).
+  intervals:
+    stim: [-0.2, 1.2]
+    prob: [-0.2, 1.2]
+    fdb: [-0.2, 1.0]
+    resp: [-1.2, 0.2]
+  # Shared baseline window (seconds) across timelocks.
   baseline: [-0.2, 0.0]
 
 metadata:
