@@ -1,5 +1,4 @@
 # p0ly-flow Snakemake DAG
-# Ingestion layer — US-007
 
 # --- Config ---
 configfile: "config.yaml"
@@ -10,16 +9,16 @@ _OUT_DIR = config["project_settings"]["output_directory"].rstrip("/")
 _TASK = config["project_settings"]["task"]
 _FMT = config["project_settings"]["input_format"]
 
-# Preprocessing config (US-008). All keys optional; ica_strategy present =>
+# Preprocessing config. All keys optional; ica_strategy present =>
 # the preprocess rule also emits a fitted-ICA sidecar (see _ICA_OUT below).
 _PP = config["preprocessing"]
 _ICA_ENABLED = _PP.get("ica_strategy") is not None
 
-# Metadata config (US-016). The experiment spec drives trial/Block/Onset
+# Metadata config. The experiment spec drives trial/Block/Onset
 # extraction; csv_columns and expand_trials are optional companions.
 _META = config["metadata"]
 
-# US-017: the timelock set is derived from the experiment spec itself
+# The timelock set is derived from the experiment spec itself
 # (``ExperimentSpec.timelocks`` keys) so no timelock literals live in the
 # Snakefile. ``p0ly_utils`` is already a dependency, so the spec is loaded at
 # DAG-parse time.

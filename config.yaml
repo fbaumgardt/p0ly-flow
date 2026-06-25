@@ -3,14 +3,14 @@
 
 project_settings:
   experiment_name: "p0ly_bootstrap"
-  input_format: "BrainVision"       # BrainVision | BIDS
-  data_directory: "data/raw/"       # BV: root with sub-{id}/ dirs; BIDS: BIDS dataset root
+  input_format: "BrainVision" # BrainVision | BIDS
+  data_directory: "data/raw/" # BV: root with sub-{id}/ dirs; BIDS: BIDS dataset root
   output_directory: "data/derivatives/"
-  task: "rest"                      # task label: embedded in BV filenames + BIDS entity
-  montage: "easycap-M1"             # MNE builtin montage applied on ingestion
+  task: "rest" # task label: embedded in BV filenames + BIDS entity
+  montage: "easycap-M1" # MNE builtin montage applied on ingestion
 
 subjects:
-  - "001"                            # Bootstrap: single placeholder subject (bare ID)
+  - "001" # Bootstrap: single placeholder subject (bare ID)
 
 preprocessing:
   # All keys optional — omit a key to skip that step (see SCHEMA §preprocessing / ADR-004).
@@ -37,8 +37,7 @@ epoching:
 
 metadata:
   # SCHEMA §4: path to the experiment metadata YAML spec. Specs live in
-  # metadata/specs/{experiment}.yaml (copied from p0ly-eeg to keep the pipeline
-  # self-contained; treat p0ly-eeg/src/p0ly_utils/metadata/specs as upstream).
+  # metadata/specs/{experiment}.yaml.
   experiment_spec: "metadata/specs/dmss.yaml"
   # Optional companion CSV aligned positionally to trials (see ExperimentSpec.csv_columns).
   csv_columns: null
