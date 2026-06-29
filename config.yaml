@@ -12,6 +12,13 @@ project_settings:
 subjects:
   - "001" # Bootstrap: single placeholder subject (bare ID)
 
+ingestion:
+  # SCHEMA §4 / ADR-005 §3 amendment (US-009): manifest-driven multi-segment
+  # ingestion. One row per recording segment; the merge_recordings rule
+  # concatenates a subject's segments (N >= 1) into a single desc-raw FIF.
+  # Hand-authored for the bootstrap; regenerate via `scripts/create_tsv.py`.
+  manifest: "metadata/manifest.tsv"
+
 preprocessing:
   # All keys optional — omit a key to skip that step (see SCHEMA §preprocessing / ADR-004).
   l_freq: 1.0

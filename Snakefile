@@ -48,25 +48,34 @@ wildcard_constraints:
     timelock = r"[a-z]+"
 
 
-# --- Ingestion input resolver ---
+# --- Manifest-driven ingestion input resolver (US-009) ---
 #
-# Returns the concrete source file(s) Snakemake must see at DAG-parse time so
-# the dry-run resolves for every supported input_format. The actual reading is
-# done at runtime by scripts/ingest_raw.py via p0ly_utils.io.load_raw; these
-# paths exist purely for DAG resolution.
-#
-# BrainVision: the .vhdr is the entry point (.eeg/.vmrk are implicit siblings).
-# BIDS:        the recording resolved from the BIDS convention under the root.
-def _ingest_inputs(subject: str) -> str | list[str]:
-    if _FMT == "BrainVision":
-        return f"{_DATA_DIR}/sub-{subject}/sub-{subject}_task-{_TASK}.vhdr"
-    if _FMT == "BIDS":
-        # BIDS EEG recording basename: sub-{subject}_task-{task}_eeg.<ext>
-        # mne-bids picks the concrete extension at runtime; for DAG resolution
-        # we point at the .vhdr sidecar that the fixture / a BrainVision-based
-        # BIDS dataset writes. EDF-based BIDS datasets would use .edf here.
-        return f"{_DATA_DIR}/sub-{subject}/eeg/sub-{subject}_task-{_TASK}_eeg.vhdr"
-    raise ValueError(f"Unsupported input_format {_FMT!r} (expected 'BrainVision' or 'BIDS').")
+# `metadata/manifest.tsv` (path from `config.yaml ingestion.manifest`) is the
+# single source of truth for *which recording segments exist per subject*
+# (ADR-005 §3 amendment). One row per segment: (subject, segment, source).
+# The `raw_ingestion` rule resolves every source for a subject and merges the
+# segments in one shot (no per-segment intermediate FIFs — collapsed in the
+# first US-009 step). Regenerate the manifest after adding/raw-arranging data
+# via `scripts/create_tsv.py` (standalone CLI, not a Snakemake script).
+import pandas as _pd
+
+_MANIFEST = config["ingestion"]["manifest"]
+
+# One row per recording segment: (subject, segment, source). subject/segment
+# are forced to str so wildcard comparisons (always str) match the manifest.
+# groupby(sort=False) preserves manifest row order within each subject.
+_MANIFEST_ROWS: dict[str, list[tuple[str, str]]] = (
+    _pd.read_csv(
+        _MANIFEST, sep="\t", dtype={"subject": str, "segment": str}
+    )
+    .groupby("subject", sort=False)[["segment", "source"]]
+    .apply(lambda _g: list(_g.itertuples(index=False, name=None)))
+    .to_dict()
+)
+
+
+def _subject_sources(subject: str) -> list[str]:
+    return [src for _, src in _MANIFEST_ROWS.get(subject, [])]
 
 
 # --- Target Rule ---
@@ -100,24 +109,40 @@ rule all:
         ),
 
 
-# --- Ingestion Layer (US-007) ---
+# --- Ingestion Layer (US-007 / US-009) ---
+# Manifest-driven, one rule per subject: the manifest's rows for the subject
+# are resolved at DAG time (input) and merged at runtime by the script, which
+# calls `p0ly_utils.merge_recordings` (BAD_break boundaries, channel/sfreq
+# validation) over the per-segment Raw objects loaded via `load_raw`. No
+# per-segment intermediate FIFs are written (first US-009 step); the two-rule
+# split (per-segment ingest + merge) is a future scaling lever for per-segment
+# parallelism if needed.
 rule raw_ingestion:
-    """Ingest raw EEG per input_format via p0ly_utils.io.load_raw.
+    """Ingest and merge a subject's manifest-listed raw segments into one FIF.
 
-    Output follows BIDS-style naming: sub-{subject}_desc-raw.fif.gz
+    For each manifest row ``(segment, source)`` the script builds the per-format
+    ``source`` (BV: concrete ``.vhdr`` path; BIDS: pipeline-constructed
+    ``BIDSPath`` — single-segment BIDS only in this first step) and loads it via
+    ``p0ly_utils.io.load_raw``, then concatenates the segments with
+    ``p0ly_utils.merge.merge_recordings``. Channel types + montage are fixed on
+    each segment by ``load_raw`` and preserved by ``mne.concatenate_raws``; a
+    single-segment subject passes through ``merge_recordings`` unchanged.
+    Output: ``sub-{subject}_desc-raw.fif.gz`` consumed by ``preprocess``.
     """
     conda:
         "envs/snakemake.yaml"
     input:
-        paths=lambda wildcards: _ingest_inputs(wildcards.subject),
+        source_paths=lambda wildcards: _subject_sources(wildcards.subject),
     output:
         f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_desc-raw.fif.gz",
     params:
+        rows=lambda wildcards: _MANIFEST_ROWS.get(wildcards.subject, []),
         fmt=_FMT,
         subject="{subject}",
         task=_TASK,
         montage=config["project_settings"]["montage"],
         data_dir=_DATA_DIR,
+        datatype="eeg",
     log:
         "logs/sub-{subject}/raw_ingestion.log",
     script:
