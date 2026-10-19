@@ -31,6 +31,7 @@ raw, bad_channels, ica = pp.preprocess_raw(
     bad_channel_z_thresh=p.get("bad_channel_z_thresh"),
     ica_strategy=p.get("ica_strategy"),
     icalabel_threshold=p.get("icalabel_threshold"),
+    ica_fit_window=p.get("ica_fit_window"),
     interval_window_ms=p.get("interval_window_ms"),
     interval_reject_z_thresh=p.get("interval_reject_z_thresh"),
 )

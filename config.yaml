@@ -28,6 +28,7 @@ preprocessing:
   interval_window_ms: 500
   ica_strategy: "mne-icalabel" # find_bads_eog | mne-icalabel
   icalabel_threshold: 0.75 # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
+  ica_fit_window: null # null = full recording; float = centred N-seconds window; [tmin, tmax] = explicit window (SCHEMA §preprocessing). Crop is fit-only — the cleaned output spans the full recording.
 
 epoching:
   # Per-timelock (tmin, tmax) epoch windows — analysis-run config (ADR-006).
