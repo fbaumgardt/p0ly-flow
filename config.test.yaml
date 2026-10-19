@@ -1,0 +1,67 @@
+# p0ly-flow smoke-test configuration (US-024)
+#
+# Runs the full DAG against the synthetic dmss-marked fixture produced by
+# `scripts/create_fixture.py` — the repo's only marker-complete recording.
+#
+#   uv run --with pybv python scripts/create_fixture.py   # once, or after --seed changes
+#   uv run snakemake -n --configfile config.test.yaml     # DAG check
+#   uv run snakemake -c1 --configfile config.test.yaml    # full smoke run (<60 s)
+#
+# Differences from config.yaml are deliberate and limited to:
+#   * task / experiment_spec / manifest  -> the dmss fixture
+#   * ica_strategy: null                 -> ICLabel on synthetic noise is slow and
+#                                           meaningless; ICA has its own tests
+#   * output_directory                   -> keeps smoke artifacts out of real runs
+# Everything else mirrors config.yaml so the smoke run exercises the real chain.
+
+project_settings:
+  experiment_name: "p0ly_smoke"
+  input_format: "BrainVision"
+  data_directory: "data/raw/"
+  output_directory: "data/derivatives_test/"
+  task: "dmss"
+  montage: "easycap-M1"
+
+subjects:
+  - "001"
+
+ingestion:
+  manifest: "metadata/manifest.test.tsv"
+
+preprocessing:
+  l_freq: 1.0
+  h_freq: 100.0
+  bad_channel_z_thresh: 2.5
+  interval_reject_z_thresh: 3.0
+  interval_window_ms: 500
+  ica_strategy: null # smoke run: no ICLabel on synthetic noise (see header)
+  icalabel_threshold: 0.75
+  ica_fit_window: null
+
+epoching:
+  intervals:
+    stim: [-0.2, 1.2]
+    prob: [-0.2, 1.2]
+    fdb: [-0.2, 1.0]
+    resp: [-1.2, 0.2]
+  baseline: [-0.2, 0.0]
+
+metadata:
+  experiment_spec: "metadata/specs/dmss.yaml"
+  csv_columns: null
+  expand_trials: false
+
+group_aggregation:
+  cohort_file: "data/metadata/participants.tsv"
+  aggregate_by_cohorts: ["control", "patient", "all_combined"]
+  condition_splits:
+    correct_trials: "Correct == True"
+    incorrect_trials: "Correct == False"
+
+analysis:
+  run_erp: false
+  run_psd: false
+  run_connectivity: false
+  run_cfc: false
+  run_regression: false
+  run_decoding: false

@@ -24,6 +24,16 @@ p = snakemake.params  # type: ignore[name-defined]
 raw = mne.io.read_raw(snakemake.input.raw, preload=False)  # type: ignore[name-defined]
 events = events_from_raw(raw)
 
+# Fail loud, not empty: a recording with no markers yields no metadata at all,
+# and an empty TSV downstream is indistinguishable from a bug (US-024).
+if events.empty:
+    raise RuntimeError(
+        f"inject_metadata: {snakemake.input.raw} carries 0 event annotations, "  # type: ignore[name-defined]
+        f"so no trial metadata can be derived for spec {p.spec_path!r}. "
+        "Check that this is the intended task recording and that "
+        "metadata.experiment_spec matches its marker set."
+    )
+
 spec = ExperimentSpec.from_yaml(p.spec_path)
 metadata = parse_metadata(
     spec,
