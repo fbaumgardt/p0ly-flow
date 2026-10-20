@@ -8,6 +8,7 @@ authors = [
 ]
 requires-python = ">=3.13"
 dependencies = [
+    "h5io>=0.2.5",
     "p0ly-utils",
     "snakemake>=9.0",
 ]

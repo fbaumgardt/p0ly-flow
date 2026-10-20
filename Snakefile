@@ -118,6 +118,46 @@ _ERP_TARGETS = (
     else []
 )
 
+# --- PSD Analysis Layer (US-011) ---
+#
+# Absolute/relative band power + specparam aperiodic parameterization (PRD
+# stage 5). The condition set is shared with the ERP layer (_ERP_QUERIES,
+# built above with the all_trials guard). No statistics live in this module,
+# so single-subject cohorts run the full rule set (no n >= 2 gating).
+_PSD_ENABLED = config["analysis"]["run_psd"]
+_PSD_QUERIES = _ERP_QUERIES
+_PSD_SETTINGS = config["psd"] if _PSD_ENABLED else {}
+
+# Per-subject condition spectra (rule psd_subject): every channel kept as a
+# QC artifact. Containers are MNE Spectrum HDF5 files (h5io — Spectrum.save's
+# native format; read back via mne.time_frequency.read_spectrum), NOT FIF:
+# Spectrum persistence is HDF5-only in MNE 1.12. Flat per-timelock group
+# layout (ADR-007 pattern; US-015 will slot the {cohort} wildcard in between).
+_PSD_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-psd.h5"
+)
+_PSD_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-psd_ave.h5"
+)
+_PSD_PARAMS_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-psd_params.csv"
+)
+_PSD_BANDPOWER_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-psd_bandpower.csv"
+)
+
+# `rule all` PSD target expansion (empty list when analysis.run_psd is false);
+# per-subject spectra stay intermediates feeding the group rules.
+_PSD_TARGETS = (
+    expand(
+        [_PSD_GROUP_OUT, _PSD_PARAMS_OUT, _PSD_BANDPOWER_OUT],
+        timelock=_TIMELOCKS,
+        condition=list(_PSD_QUERIES),
+    )
+    if _PSD_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -188,6 +228,9 @@ rule all:
         # US-010: ERP group analysis when enabled in config (analysis.run_erp;
         # contrast families parse-time-gated to cohorts with >= 2 subjects).
         _ERP_TARGETS,
+        # US-011: PSD band powers + aperiodic parameterization when enabled
+        # (analysis.run_psd; no n >= 2 gating — no statistics in this module).
+        _PSD_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -449,3 +492,102 @@ rule run_erp:
         "logs/group/run_erp_{timelock}_{contrast}.log",
     script:
         "scripts/erp.py"
+
+
+# --- PSD Analysis Layer (US-011) ---
+# Welch spectra per (subject, timelock, condition) feed two group rules; the
+# split mirrors the ERP layer (ADR-007): per-subject QC artifacts, group
+# averages, and per-condition parameterization. All math lives in
+# p0ly_utils.analysis (DoD: no algorithm logic in rule scripts); single-subject
+# cohorts run everything (no statistics in this module).
+rule psd_subject:
+    """Welch spectrum of one subject's epochs for one (timelock, condition).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata), selects the condition via its ``metadata.eval``
+    query from ``config.yaml group_aggregation.condition_splits`` (the
+    reserved ``all_trials`` condition applies no query), and computes the
+    Welch spectrum with ``config.yaml psd`` settings.
+    ``p0ly_utils.analysis.psd_by_condition`` fails loud on zero query matches
+    (US-024 philosophy). The spectrum keeps every channel (per-subject QC
+    artifact) and is written as MNE Spectrum HDF5 (h5io — Spectrum.save's
+    native container; not FIF).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        psd=_PSD_SUBJECT_OUT,
+    params:
+        condition="{condition}",
+        condition_query=lambda wildcards: _PSD_QUERIES[wildcards.condition],
+        psd=_PSD_SETTINGS,
+    log:
+        "logs/sub-{subject}/psd_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/psd_subject.py"
+
+
+rule psd_group_average:
+    """Equal-weight grand-average spectrum across subjects (timelock, condition).
+
+    Consumes the per-subject ``desc-psd`` files (rule psd_subject) and writes
+    ``group_analysis/{timelock}/{condition}_desc-psd_ave.h5`` (MNE Spectrum
+    HDF5) via ``p0ly_utils.analysis.group_psd`` (frequency-grid + channel-set
+    guards).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_psds=lambda wildcards: expand(
+            _PSD_SUBJECT_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_PSD_GROUP_OUT,
+    log:
+        "logs/group/psd_group_average_{timelock}_{condition}.log",
+    script:
+        "scripts/psd_group_average.py"
+
+
+rule run_psd:
+    """Aperiodic parameterization + band powers for one (timelock, condition).
+
+    Fits specparam (fixed mode, library defaults) to every subject's
+    per-condition spectrum and to the grand-average spectrum, and computes
+    absolute/relative band power per channel from ``config.yaml psd`` (bands
+    + norm_range). Outputs (flat per-timelock, one job writes both):
+      - {condition}_desc-psd_params.csv : one row per (subject, channel) plus
+        a ``subject == 'group_average'`` row fit on the grand-average spectrum
+        — columns offset, exponent, knee_frequency (empty in fixed mode),
+        r_squared, error_mae, n_peaks, and peak_centers/peak_powers/
+        peak_widths (space-separated lists).
+      - {condition}_desc-psd_bandpower.csv : one row per (subject, channel,
+        band) — absolute (V^2/Hz mean density) and relative (fraction of the
+        norm_range mass) power.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_psds=lambda wildcards: expand(
+            _PSD_SUBJECT_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+        group_average=_PSD_GROUP_OUT,
+    output:
+        params=_PSD_PARAMS_OUT,
+        bandpower=_PSD_BANDPOWER_OUT,
+    params:
+        condition="{condition}",
+        bands=_PSD_SETTINGS.get("bands", {}),
+        norm_range=_PSD_SETTINGS.get("norm_range"),
+    log:
+        "logs/group/run_psd_{timelock}_{condition}.log",
+    script:
+        "scripts/run_psd.py"
