@@ -42,10 +42,88 @@ _ICA_TARGETS = (
     else []
 )
 
+# --- Group analysis config (US-010) ---
+#
+# ERP grand averages + cluster permutation contrasts (PRD stage 5). The
+# implicit `all_trials` condition carries no query, so one grand average per
+# timelock always exists even when `condition_splits` is empty; contrasts
+# enumerate the unordered pairs of the explicit condition splits only (US-010
+# Notes: all_trials is an average target, never a contrast arm).
+from itertools import combinations
+
+_ERP_ENABLED = config["analysis"]["run_erp"]
+_ERP_SPLITS = config["group_aggregation"]["condition_splits"]
+if "all_trials" in _ERP_SPLITS:
+    raise ValueError(
+        "config group_aggregation.condition_splits must not redefine the "
+        "reserved 'all_trials' condition"
+    )
+_ERP_QUERIES = {"all_trials": None, **_ERP_SPLITS}
+_ERP_STATS = config["erp"] if _ERP_ENABLED else {}
+_ERP_CONTRASTS = {
+    f"{first}-vs-{second}": (first, second)
+    for first, second in combinations(_ERP_SPLITS, 2)
+}
+# Cluster permutation contrasts are a one-sample test over per-subject
+# difference waves, so they need >= 2 subjects (grand averages stay valid for
+# a single-subject bootstrap; adding subjects re-parses the DAG and re-enables
+# the contrast targets).
+_ERP_CONTRASTS_ENABLED = (
+    _ERP_ENABLED and len(_ERP_CONTRASTS) > 0 and len(config["subjects"]) >= 2
+)
+if _ERP_ENABLED and _ERP_CONTRASTS and not _ERP_CONTRASTS_ENABLED:
+    print(
+        f"run_erp: only {len(config['subjects'])} subject(s) configured — "
+        "cluster permutation contrast targets omitted from the DAG; "
+        "grand averages only (re-parse after adding subjects)"
+    )
+
+# Per-subject condition averages (rule erp_subject): keep every channel as a
+# QC artifact; EEG-only selection + stats happen inside the library call.
+_ERP_AVE_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-ave.fif.gz"
+)
+# Flat per-timelock group layout (US-010 decision); US-015 will slot the
+# {cohort} wildcard in between for cohort-condition expansion.
+_ERP_GROUP_AVE_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-ave.fif.gz"
+)
+_ERP_CONTRAST_NPZ_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{contrast}}_clusterperm.npz"
+)
+_ERP_CONTRAST_CSV_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{contrast}}_clusterperm.csv"
+)
+
+# `rule all` ERP target expansion (empty list when analysis.run_erp is false;
+# contrast families additionally gated to cohorts with >= 2 subjects).
+_ERP_TARGETS = (
+    (
+        expand(
+            _ERP_GROUP_AVE_OUT,
+            timelock=_TIMELOCKS,
+            condition=list(_ERP_QUERIES),
+        )
+        + (
+            expand(
+                [_ERP_CONTRAST_NPZ_OUT, _ERP_CONTRAST_CSV_OUT],
+                timelock=_TIMELOCKS,
+                contrast=list(_ERP_CONTRASTS),
+            )
+            if _ERP_CONTRASTS_ENABLED
+            else []
+        )
+    )
+    if _ERP_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
-    timelock = r"[a-z]+"
+    timelock = r"[a-z]+",
+    condition = r"[a-z_]+",
+    contrast = r"[a-z_]+-vs-[a-z_]+"
 
 
 # --- Manifest-driven ingestion input resolver (US-009) ---
@@ -107,6 +185,9 @@ rule all:
             subject=config["subjects"],
             timelock=_TIMELOCKS,
         ),
+        # US-010: ERP group analysis when enabled in config (analysis.run_erp;
+        # contrast families parse-time-gated to cohorts with >= 2 subjects).
+        _ERP_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -263,3 +344,108 @@ rule epoch:
         "logs/sub-{subject}/epoch_{timelock}.log",
     script:
         "scripts/epoch.py"
+
+
+# --- ERP Analysis Layer (US-010) ---
+# Per-subject condition averages (erp_subject) feed the two group rules;
+# the split keeps per-subject QC artifacts independent of group
+# recomputation. All math lives in p0ly_utils.analysis (DoD: no algorithm
+# logic in rule scripts); cluster permutation contrasts are omitted from
+# the DAG at parse time for cohorts with < 2 subjects.
+rule erp_subject:
+    """Average one subject's epochs for one (timelock, condition) pair.
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata) and selects the condition via its
+    ``metadata.eval`` query from ``config.yaml
+    group_aggregation.condition_splits``; the reserved ``all_trials``
+    condition applies no query. ``p0ly_utils.analysis.average_epochs``
+    performs selection + averaging and fails loud on zero epochs or zero
+    query matches (US-024 philosophy). The output keeps every channel
+    (per-subject QC artifact).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        ave=_ERP_AVE_OUT,
+    params:
+        condition_query=lambda wildcards: _ERP_QUERIES[wildcards.condition],
+    log:
+        "logs/sub-{subject}/erp_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/erp_subject.py"
+
+
+rule erp_group_average:
+    """Equal-weight grand average across subjects for one (timelock, condition).
+
+    Consumes the per-subject ``desc-ave`` files (rule erp_subject) and writes
+    ``group_analysis/{timelock}/{condition}_desc-ave.fif.gz`` (flat
+    per-timelock layout; US-015 will slot the ``{cohort}`` wildcard in
+    between). ``p0ly_utils.analysis.grand_average`` equal-weights every
+    subject regardless of trial counts.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_averages=lambda wildcards: expand(
+            _ERP_AVE_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_ERP_GROUP_AVE_OUT,
+    log:
+        "logs/group/erp_group_average_{timelock}_{condition}.log",
+    script:
+        "scripts/erp_group_average.py"
+
+
+rule run_erp:
+    """Cluster permutation contrast across subjects for one timelock (PRD stage 5).
+
+    Inputs are the per-subject condition evokeds (rule erp_subject) for both
+    contrast arms. ``p0ly_utils.analysis.group_erp`` builds the per-subject
+    difference waves (cond_first - cond_second), picks EEG-only channels so
+    they align with the montage-derived channel adjacency, and runs the
+    one-sample cluster permutation test against zero with ``config.yaml erp``
+    statistics settings; it fails loud on < 2 subjects (the DAG omits
+    contrast targets for smaller cohorts — see _ERP_CONTRASTS_ENABLED, so
+    this guard only trips on forced/stale rule runs).
+
+    Outputs (flat per-timelock under group_analysis/, one job writes both):
+      - {cond_first}-vs-{cond_second}_clusterperm.npz : t_obs
+        (n_channels, n_times), per-cluster p-values, sign-flip null maxima
+        (h0; length = unique permutations actually used) + settings echo.
+      - .csv : one row per detected cluster — index arrays are pixel-wise
+        (values repeat), so n_channels/n_times count distinct values and
+        n_pixels the total mass; header-only when no cluster formed.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        cond_first=lambda wildcards: expand(
+            _ERP_AVE_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][0],
+        ),
+        cond_second=lambda wildcards: expand(
+            _ERP_AVE_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][1],
+        ),
+    output:
+        npz=_ERP_CONTRAST_NPZ_OUT,
+        csv=_ERP_CONTRAST_CSV_OUT,
+    params:
+        conditions=lambda wildcards: _ERP_CONTRASTS[wildcards.contrast],
+        stats=_ERP_STATS,
+    log:
+        "logs/group/run_erp_{timelock}_{contrast}.log",
+    script:
+        "scripts/erp.py"

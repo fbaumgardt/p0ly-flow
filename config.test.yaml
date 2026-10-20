@@ -12,6 +12,9 @@
 #   * ica_strategy: null                 -> ICLabel on synthetic noise is slow and
 #                                           meaningless; ICA has its own tests
 #   * output_directory                   -> keeps smoke artifacts out of real runs
+#   * analysis.run_erp: true             -> exercises the US-010 ERP rules end-to-end
+#                                          (grand averages; cluster permutation
+#                                          contrasts need >= 2 subjects)
 # Everything else mirrors config.yaml so the smoke run exercises the real chain.
 
 project_settings:
@@ -58,8 +61,17 @@ group_aggregation:
     correct_trials: "Correct == True"
     incorrect_trials: "Correct == False"
 
+erp:
+  # US-010: statistics for the run_erp rule (cluster permutation contrasts).
+  # n_permutations caps the sign-flip permutation count — with n subjects MNE
+  # uses min(n_permutations, 2 ** (n_subjects - 1)) unique permutations, so
+  # small cohorts quantize p-values (min p = 1 / n_unique). seed makes the
+  # permutation draw reproducible; null re-randomizes every run.
+  n_permutations: 1024
+  seed: 20261020
+
 analysis:
-  run_erp: false
+  run_erp: true
   run_psd: false
   run_connectivity: false
   run_cfc: false
