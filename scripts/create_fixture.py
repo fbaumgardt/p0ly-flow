@@ -99,10 +99,18 @@ def _build_data(n_samples: int, rng: np.random.Generator) -> np.ndarray:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--out-dir", type=Path, default=_DEFAULT_OUT)
+    parser.add_argument(
+        "--subject",
+        default="001",
+        help="bare numeric subject ID (US-026: a second subject lets the "
+        "smoke run exercise the >= 2-subject cohort statistics rules)",
+    )
+    parser.add_argument("--out-dir", type=Path, default=None)
     parser.add_argument("--seed", type=int, default=20260630)
     parser.add_argument("--overwrite", action="store_true")
     args = parser.parse_args(argv)
+    if args.out_dir is None:
+        args.out_dir = _DEFAULT_OUT.parent / f"sub-{args.subject}"
 
     rng = np.random.default_rng(args.seed)
     events, duration = _build_events(rng)
@@ -114,14 +122,14 @@ def main(argv: list[str] | None = None) -> int:
         data=data,
         sfreq=_SFREQ,
         ch_names=_CH_NAMES,
-        fname_base="sub-001_task-dmss",
+        fname_base=f"sub-{args.subject}_task-dmss",
         folder_out=str(args.out_dir),
         events=events,
         overwrite=args.overwrite,
     )
     n_trials = _N_BLOCKS * _N_TRIALS
     print(
-        f"Wrote {args.out_dir}/sub-001_task-dmss.vhdr "
+        f"Wrote {args.out_dir}/sub-{args.subject}_task-dmss.vhdr "
         f"({_N_CHANNELS} ch, {duration:.1f} s, {len(events)} markers, "
         f"{n_trials} trials in {_N_BLOCKS} blocks)"
     )

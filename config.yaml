@@ -54,7 +54,11 @@ metadata:
 
 group_aggregation:
   cohort_file: "data/metadata/participants.tsv"
-  aggregate_by_cohorts: ["control", "patient", "all_combined"]
+  # Cohorts to expand the {cohort} wildcard over. Every declared label must
+  # have participants in cohort_file (parse-time fail loud, US-015) — add a
+  # cohort here only after its participants are entered in participants.tsv.
+  # `all_combined` is reserved: it aggregates every participant in the file.
+  aggregate_by_cohorts: ["control", "all_combined"]
   condition_splits:
     correct_trials: "Correct == True"
     incorrect_trials: "Correct == False"
@@ -100,6 +104,13 @@ tfr:
   n_cycles: null # null = adaptive freqs/2; float = fixed cycles
   time_bandwidth: 4.0 # multitaper only (ignored for morlet)
   decim: 4 # 1.4 s epoch @ 256 Hz -> ~90 persisted time samples
+  # US-026: cluster-permutation statistics for the run_tfr_cluster rule —
+  # one-sample test over per-subject difference grids, so with n subjects
+  # MNE uses min(n_permutations, 2 ** (n_subjects - 1)) unique permutations.
+  # Raw power difference; ITPC is Fisher-z-transformed before differencing
+  # (see SCHEMA §9). Same quantization/seed semantics as the erp block.
+  n_permutations: 1024
+  seed: 20261020
 
 connectivity:
   # US-013: spectral connectivity for the connectivity_subject /
