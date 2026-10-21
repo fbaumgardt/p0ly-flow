@@ -18,6 +18,9 @@
 #   * analysis.run_psd: true             -> exercises the US-011 PSD rules
 #                                          end-to-end (no n >= 2 gating —
 #                                          no statistics in this module)
+#   * analysis.run_tfr: true             -> exercises the US-012 TFR rules
+#                                          end-to-end (power + ITPC +
+#                                          difference map; no n >= 2 gating)
 # Everything else mirrors config.yaml so the smoke run exercises the real chain.
 
 project_settings:
@@ -88,9 +91,22 @@ psd:
     gamma: [30, 45]
   norm_range: [1, 45]
 
+tfr:
+  # US-012: TFR settings (see config.yaml for the full key documentation).
+  # Same grid as config.yaml — the smoke run exercises the real analysis
+  # settings end-to-end.
+  method: "morlet"
+  fmin: 4.0
+  fmax: 45.0
+  step: 1.0
+  n_cycles: null
+  time_bandwidth: 4.0
+  decim: 4
+
 analysis:
   run_erp: true
   run_psd: true
+  run_tfr: true
   run_connectivity: false
   run_cfc: false
   run_regression: false

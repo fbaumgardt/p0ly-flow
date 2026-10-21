@@ -158,6 +158,52 @@ _PSD_TARGETS = (
     else []
 )
 
+# --- TFR Analysis Layer (US-012) ---
+#
+# Morlet/multitaper complex TFR (one convolution) -> per-subject two-entry
+# HDF5 files ([0] = epoch-mean power, [1] = ITPC — documented positional
+# convention, verified by the rule scripts on read) + grand averages +
+# per-contrast difference maps. Mirrors the PSD layer (ADR-007): condition
+# set shared with ERP (_ERP_QUERIES), flat per-timelock group layout, and
+# no n >= 2 gating — the difference map is a subtraction, defined at n=1
+# (no statistics in this module; cluster permutation over channel x freq x
+# time is a documented US-015 deferred alternative).
+_TFR_ENABLED = config["analysis"]["run_tfr"]
+_TFR_QUERIES = _ERP_QUERIES
+_TFR_SETTINGS = config["tfr"] if _TFR_ENABLED else {}
+
+# Per-subject condition TFRs (rule tfr_subject): every channel kept as a QC
+# artifact. Containers are two-entry AverageTFR HDF5 files (h5io family via
+# mne.time_frequency.write_tfrs/read_tfrs — verified live in MNE 1.12.1).
+_TFR_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-tfr.h5"
+)
+_TFR_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-tfr_ave.h5"
+)
+_TFR_DIFF_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{contrast}}_desc-tfrdiff.h5"
+)
+
+# `rule all` TFR target expansion (empty when analysis.run_tfr is false);
+# per-subject TFRs stay intermediates feeding the group rules. Contrast
+# naming shares the ERP contrast set (unordered pairs of condition_splits).
+_TFR_TARGETS: list[str]
+if _TFR_ENABLED:
+    _TFR_TARGETS = expand(
+        _TFR_GROUP_OUT,
+        timelock=_TIMELOCKS,
+        condition=list(_TFR_QUERIES),
+    )
+    if _ERP_CONTRASTS:
+        _TFR_TARGETS += expand(
+            _TFR_DIFF_OUT,
+            timelock=_TIMELOCKS,
+            contrast=list(_ERP_CONTRASTS),
+        )
+else:
+    _TFR_TARGETS = []
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -231,6 +277,10 @@ rule all:
         # US-011: PSD band powers + aperiodic parameterization when enabled
         # (analysis.run_psd; no n >= 2 gating — no statistics in this module).
         _PSD_TARGETS,
+        # US-012: TFR grand averages + per-contrast difference maps when
+        # enabled in config (analysis.run_tfr; no n >= 2 gating — a
+        # subtraction is defined at n=1).
+        _TFR_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -591,3 +641,103 @@ rule run_psd:
         "logs/group/run_psd_{timelock}_{condition}.log",
     script:
         "scripts/run_psd.py"
+
+
+# --- TFR Analysis Layer (US-012) ---
+# Complex Morlet/multitaper transforms per (subject, timelock, condition) —
+# reduced in-memory to a two-entry [power, ITPC] HDF5 — feed two group
+# rules; the split mirrors the ERP/PSD layers (ADR-007): per-subject QC
+# artifacts, group averages, per-contrast difference maps. All math lives
+# in p0ly_utils.analysis (DoD: no algorithm logic in rule scripts);
+# single-subject cohorts run everything (difference is defined at n=1).
+rule tfr_subject:
+    """Complex TFR -> [power, ITPC] for one subject's (timelock, condition).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata), selects the condition via its ``metadata.eval``
+    query from ``config.yaml group_aggregation.condition_splits`` (the
+    reserved ``all_trials`` condition applies no query), and computes the
+    single-trial complex TFR with ``config.yaml tfr`` settings — one
+    convolution (``p0ly_utils.analysis.tfr_epochs``) reduced immediately to
+    epoch-mean power (:func:`average_power`) and ITPC (:func:`itpc`); the
+    large complex transient never touches disk. Fails loud on zero query
+    matches (US-024 philosophy). The result keeps every channel (per-subject
+    QC artifact) and is written as a two-entry AverageTFR HDF5 (h5io —
+    write_tfrs/read_tfrs; positional convention [0]=power, [1]=ITPC).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        tfr=_TFR_SUBJECT_OUT,
+    params:
+        condition="{condition}",
+        condition_query=lambda wildcards: _TFR_QUERIES[wildcards.condition],
+        tfr=_TFR_SETTINGS,
+    log:
+        "logs/sub-{subject}/tfr_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/tfr_subject.py"
+
+
+rule tfr_group_average:
+    """Equal-weight grand average of [power, ITPC] across subjects.
+
+    Consumes the per-subject ``desc-tfr`` files (rule tfr_subject) and writes
+    ``group_analysis/{timelock}/{condition}_desc-tfr_ave.h5`` (two-entry
+    AverageTFR HDF5) via ``p0ly_utils.analysis.group_tfr`` (mne.grand_average
+    with frequency-grid + channel-set guards), independently for the power
+    and ITPC entries.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_tfrs=lambda wildcards: expand(
+            _TFR_SUBJECT_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_TFR_GROUP_OUT,
+    log:
+        "logs/group/tfr_group_average_{timelock}_{condition}.log",
+    script:
+        "scripts/tfr_group_average.py"
+
+
+rule run_tfr:
+    """Difference map (cond_first - cond_second) for one timelock contrast.
+
+    Inputs are the two group-average ``desc-tfr_ave.h5`` files (rule
+    tfr_group_average — two reads, not 2 x N subject re-reads). Each file's
+    [power, ITPC] entries are subtracted element-wise with
+    ``p0ly_utils.analysis.tfr_difference`` (grid + channel guards) and
+    written as a two-entry ``{condA}-vs-{condB}_desc-tfrdiff.h5``. No
+    statistical test: subtraction is defined at n=1 (a single-subject
+    difference is honest — group averages of one subject). Cluster
+    permutation over (channel x freq x time) is a documented US-015
+    deferred alternative.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        cond_first=lambda wildcards: expand(
+            _TFR_GROUP_OUT,
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][0],
+        ),
+        cond_second=lambda wildcards: expand(
+            _TFR_GROUP_OUT,
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][1],
+        ),
+    output:
+        diff=_TFR_DIFF_OUT,
+    params:
+        conditions=lambda wildcards: _ERP_CONTRASTS[wildcards.contrast],
+    log:
+        "logs/group/run_tfr_{timelock}_{contrast}.log",
+    script:
+        "scripts/run_tfr.py"

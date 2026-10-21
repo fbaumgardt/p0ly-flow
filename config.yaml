@@ -83,9 +83,28 @@ psd:
     gamma: [30, 45]
   norm_range: [1, 45]
 
+tfr:
+  # US-012: Morlet/multitaper TFR power + ITPC for the tfr_subject /
+  # tfr_group_average / run_tfr rules (read when analysis.run_tfr is true).
+  # method: "morlet" | "multitaper" (time_bandwidth applies to multitaper
+  # only); the inclusive [fmin, fmax] grid is built with step; n_cycles null
+  # = adaptive freqs/2 (time resolution scales with frequency), float =
+  # fixed cycle count; decim shrinks the persisted time axis (the
+  # full-rate transient is computed regardless — artifact-size lever).
+  # No baseline key: the epochs already carry the time-domain baseline
+  # (display-scale baselining is a documented non-goal).
+  method: "morlet"
+  fmin: 4.0
+  fmax: 45.0
+  step: 1.0
+  n_cycles: null # null = adaptive freqs/2; float = fixed cycles
+  time_bandwidth: 4.0 # multitaper only (ignored for morlet)
+  decim: 4 # 1.4 s epoch @ 256 Hz -> ~90 persisted time samples
+
 analysis:
   run_erp: false
   run_psd: false
+  run_tfr: false
   run_connectivity: false
   run_cfc: false
   run_regression: false
