@@ -103,11 +103,25 @@ tfr:
   time_bandwidth: 4.0
   decim: 4
 
+connectivity:
+  # US-013: connectivity settings (see config.yaml for the full key
+  # documentation). Same grid/threshold as config.yaml — the smoke run
+  # exercises the real analysis settings end-to-end.
+  methods: ["wpli", "coh", "plv"]
+  fmin: 4.0
+  fmax: 45.0
+  min_edge_weight: 0.1
+  bands:
+    theta: [4, 8]
+    alpha: [8, 12]
+    beta: [12, 30]
+    gamma: [30, 45]
+
 analysis:
   run_erp: true
   run_psd: true
   run_tfr: true
-  run_connectivity: false
+  run_connectivity: true
   run_cfc: false
   run_regression: false
   run_decoding: false

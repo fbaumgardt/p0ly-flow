@@ -204,6 +204,52 @@ if _TFR_ENABLED:
 else:
     _TFR_TARGETS = []
 
+# --- Connectivity Analysis Layer (US-013) ---
+#
+# One mne-connectivity call computes every configured method (wPLI /
+# coherence / PLV) per (subject × timelock × condition) -> per-method
+# adjacency (n_channels, n_channels, n_freqs) flattened to .npz archives +
+# grand averages + graph metrics of the band-averaged group adjacencies.
+# Mirrors the TFR/PSD layers (ADR-007): condition set shared with ERP
+# (_ERP_QUERIES), flat per-timelock group layout, and no n >= 2 gating —
+# graph metrics of a grand-averaged adjacency are defined at n=1 (no
+# statistics in this module).
+_CONN_ENABLED = config["analysis"]["run_connectivity"]
+_CONN_QUERIES = _ERP_QUERIES
+_CONN_SETTINGS = config["connectivity"] if _CONN_ENABLED else {}
+
+# Per-subject condition connectivity (rule connectivity_subject): every
+# channel kept as a QC artifact. Containers are .npz archives — one
+# (n_channels, n_channels, n_freqs) adjacency per method + ch_names + freqs.
+_CONN_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-conn.npz"
+)
+_CONN_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-conn_ave.npz"
+)
+_CONN_GRAPH_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{condition}}_desc-conn_graph.csv"
+)
+
+# `rule all` connectivity target expansion (empty when
+# analysis.run_connectivity is false); per-subject archives stay
+# intermediates feeding the group rules. No contrast family here: graph
+# metrics of a difference adjacency would compound two biases (averaging
+# flipped-coupled pairs) — per-condition graphs only (deferred to US-015).
+_CONN_TARGETS: list[str]
+if _CONN_ENABLED:
+    _CONN_TARGETS = expand(
+        _CONN_GROUP_OUT,
+        timelock=_TIMELOCKS,
+        condition=list(_CONN_QUERIES),
+    ) + expand(
+        _CONN_GRAPH_OUT,
+        timelock=_TIMELOCKS,
+        condition=list(_CONN_QUERIES),
+    )
+else:
+    _CONN_TARGETS = []
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -281,6 +327,10 @@ rule all:
         # enabled in config (analysis.run_tfr; no n >= 2 gating — a
         # subtraction is defined at n=1).
         _TFR_TARGETS,
+        # US-013: connectivity grand averages + band graph metrics when
+        # enabled in config (analysis.run_connectivity; no n >= 2 gating —
+        # graph metrics of a grand average are defined at n=1).
+        _CONN_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -741,3 +791,90 @@ rule run_tfr:
         "logs/group/run_tfr_{timelock}_{contrast}.log",
     script:
         "scripts/run_tfr.py"
+
+
+rule connectivity_subject:
+    """Per-method spectral connectivity for one subject's (timelock, condition).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata), selects the condition via its ``metadata.eval``
+    query from ``config.yaml group_aggregation.condition_splits`` (the
+    reserved ``all_trials`` condition applies no query), and computes one
+    ``mne_connectivity.spectral_connectivity_epochs`` call across all
+    configured methods with ``config.yaml connectivity`` settings. The result
+    keeps every channel (per-subject QC artifact) and is written as an ``.npz``
+    archive — one ``(n_channels, n_channels, n_freqs)`` adjacency per method
+    (symmetric, zero diagonal) plus ``ch_names`` and ``freqs``.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        conn=_CONN_SUBJECT_OUT,
+    params:
+        condition="{condition}",
+        condition_query=lambda wildcards: _CONN_QUERIES[wildcards.condition],
+        connectivity=_CONN_SETTINGS,
+    log:
+        "logs/sub-{subject}/connectivity_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/connectivity_subject.py"
+
+
+rule connectivity_group_average:
+    """Equal-weight grand average of per-method adjacencies across subjects.
+
+    Consumes the per-subject ``desc-conn.npz`` archives (rule
+    connectivity_subject) and writes
+    ``group_analysis/{timelock}/{condition}_desc-conn_ave.npz`` (same archive
+    layout) via ``p0ly_utils.analysis.group_connectivity`` (equal-weight mean
+    with channel-set + method + frequency-grid guards).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_conns=lambda wildcards: expand(
+            _CONN_SUBJECT_OUT,
+            subject=config["subjects"],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_CONN_GROUP_OUT,
+    params:
+        methods=lambda wildcards: _CONN_SETTINGS["methods"],
+    log:
+        "logs/group/connectivity_group_average_{timelock}_{condition}.log",
+    script:
+        "scripts/connectivity_group_average.py"
+
+
+rule run_connectivity:
+    """Graph metrics of the band-averaged group connectivity (timelock, condition).
+
+    Input is the grand-average ``desc-conn_ave.npz`` (rule
+    connectivity_group_average — one read, not N subject re-reads). Each
+    method's adjacency is band-averaged (``config.yaml connectivity.bands``,
+    inclusive windows) and thresholded (``min_edge_weight`` noise floor), and
+    ``p0ly_utils.analysis.graph_metrics`` reports weighted clustering, the
+    characteristic path length (largest connected component, effective
+    distance ``1/weight``) and strength centrality as one long-format CSV
+    ``(method, band, node)``. No statistical test: defined at n=1, mirroring
+    PSD/TFR. Per-contrast difference *graphs* are a documented deferral —
+    difference adjacencies compound sign flips of near-zero couplings.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        ave=_CONN_GROUP_OUT,
+    output:
+        graph=_CONN_GRAPH_OUT,
+    params:
+        methods=lambda wildcards: _CONN_SETTINGS["methods"],
+        bands=lambda wildcards: _CONN_SETTINGS["bands"],
+        min_edge_weight=lambda wildcards: _CONN_SETTINGS["min_edge_weight"],
+    log:
+        "logs/group/run_connectivity_{timelock}_{condition}.log",
+    script:
+        "scripts/run_connectivity.py"

@@ -101,6 +101,28 @@ tfr:
   time_bandwidth: 4.0 # multitaper only (ignored for morlet)
   decim: 4 # 1.4 s epoch @ 256 Hz -> ~90 persisted time samples
 
+connectivity:
+  # US-013: spectral connectivity for the connectivity_subject /
+  # connectivity_group_average / run_connectivity rules (read when
+  # analysis.run_connectivity is true). One mne-connectivity call computes
+  # every method; each adjacency comes back (n_channels, n_channels,
+  # n_freqs), symmetric with a zero diagonal (self-connectivity excluded).
+  # run_connectivity graphs are the band-averaged group adjacencies:
+  # min_edge_weight drops weak couplings (noise-floor lever — a thresholded
+  # functional graph must NOT be complete); path length uses the effective
+  # distance 1/weight on the largest connected component. Bands are
+  # inclusive (fmin, fmax) Hz windows; module-local (not psd.bands) so the
+  # PSD section stays free to change its grid.
+  methods: ["wpli", "coh", "plv"]
+  fmin: 4.0
+  fmax: 45.0
+  min_edge_weight: 0.1
+  bands:
+    theta: [4, 8]
+    alpha: [8, 12]
+    beta: [12, 30]
+    gamma: [30, 45]
+
 analysis:
   run_erp: false
   run_psd: false
