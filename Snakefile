@@ -324,12 +324,21 @@ _CONN_GROUP_OUT = (
 _CONN_GRAPH_OUT = (
     f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{condition}}_desc-conn_graph.csv"
 )
+# Per-contrast difference graphs (US-013 deferral): graph metrics of the plain
+# condition-first minus condition-second difference adjacency. Suffix
+# `_diff-graph` keeps an unambiguous filename next to the per-condition
+# `{condition}_desc-conn_graph.csv` files (the `contrast` wildcard carries a
+# `-vs-`).
+_CONN_CONTRAST_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{contrast}}_desc-conn_diff-graph.csv"
+)
 
 # `rule all` connectivity target expansion (empty when
 # analysis.run_connectivity is false); per-subject archives stay
-# intermediates feeding the group rules. No contrast family here: graph
-# metrics of a difference adjacency would compound two biases (averaging
-# flipped-coupled pairs) — per-condition graphs only (deferred to US-015).
+# intermediates feeding the group rules. There is still no contrast family
+# of *subject-level* connectivity (the US-013 bias note stands); contrast
+# targets are the graph metrics of a difference of the two grand means —
+# defined for any n, no statistics involved.
 _CONN_TARGETS: list[str]
 if _CONN_ENABLED:
     _CONN_TARGETS = expand(
@@ -343,6 +352,13 @@ if _CONN_ENABLED:
         cohort=_COHORTS,
         condition=list(_CONN_QUERIES),
     )
+    if _ERP_CONTRASTS:
+        _CONN_TARGETS += expand(
+            _CONN_CONTRAST_OUT,
+            timelock=_TIMELOCKS,
+            cohort=_COHORTS,
+            contrast=list(_ERP_CONTRASTS),
+        )
 else:
     _CONN_TARGETS = []
 
@@ -1014,8 +1030,10 @@ rule run_connectivity:
     characteristic path length (largest connected component, effective
     distance ``1/weight``) and strength centrality as one long-format CSV
     ``(method, band, node)``. No statistical test: defined at n=1, mirroring
-    PSD/TFR. Per-contrast difference *graphs* are a documented deferral —
-    difference adjacencies compound sign flips of near-zero couplings.
+    PSD/TFR. Per-contrast difference graphs live in rule
+    ``connectivity_contrast`` (US-013 deferral) — difference adjacencies
+    compound sign flips of near-zero couplings, so they are labelled
+    condition differences, not physical coupling strengths.
     """
     conda:
         "envs/snakemake.yaml"
@@ -1031,3 +1049,43 @@ rule run_connectivity:
         "logs/group/run_connectivity_{timelock}_{cohort}_{condition}.log",
     script:
         "scripts/run_connectivity.py"
+
+
+rule connectivity_contrast:
+    """Graph metrics of the per-contrast difference connectivity (US-013).
+
+    Reads the two grand-average ``desc-conn_ave.npz`` archives of a
+    contrast pair (rule connectivity_group_average; the contrast name is
+    an unordered ``condition_splits`` pair ``first-vs-second``) and writes
+    ``group_analysis/{timelock}/{cohort}/{contrast}_desc-conn_diff-graph.csv``
+    via ``p0ly_utils.analysis.difference_connectivity`` — the plain
+    ``first - second`` condition difference, band-averaged and thresholded
+    exactly like rule run_connectivity. Defined for any n (a difference of
+    grand means, no statistics); the one-sample per-subject difference
+    machinery is US-026's. Difference adjacencies compound sign flips of
+    near-zero couplings — interpret as condition differences only.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        ave_first=lambda wildcards: _CONN_GROUP_OUT.format(
+            timelock=wildcards.timelock,
+            cohort=wildcards.cohort,
+            condition=_ERP_CONTRASTS[wildcards.contrast][0],
+        ),
+        ave_second=lambda wildcards: _CONN_GROUP_OUT.format(
+            timelock=wildcards.timelock,
+            cohort=wildcards.cohort,
+            condition=_ERP_CONTRASTS[wildcards.contrast][1],
+        ),
+    output:
+        graph=_CONN_CONTRAST_OUT,
+    params:
+        contrast_pair=lambda wildcards: _ERP_CONTRASTS[wildcards.contrast],
+        methods=lambda wildcards: _CONN_SETTINGS["methods"],
+        bands=lambda wildcards: _CONN_SETTINGS["bands"],
+        min_edge_weight=lambda wildcards: _CONN_SETTINGS["min_edge_weight"],
+    log:
+        "logs/group/connectivity_contrast_{timelock}_{cohort}_{contrast}.log",
+    script:
+        "scripts/connectivity_contrast.py"
