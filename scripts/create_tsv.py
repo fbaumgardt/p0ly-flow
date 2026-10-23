@@ -17,12 +17,17 @@ per subject* (ADR-005 §3 amendment). One row per segment with columns:
   EEG recording file for BIDS), relative to the pipeline root, used both for
   DAG resolution and (BV) as the `load_raw` source.
 
-Task axis (US-025): the pipeline is single-task — `config.project_settings.task`
-labels every output and must not be demoted to a segment. Recordings whose
+Task axis (US-025): the pipeline is single-task by default —
+`config.project_settings.task` labels every output and must not be demoted to a
+segment (a `null` task disables the axis: every recording is catalogued).
+Recordings whose
 `task-{}` token differs from the configured task (or that carry no task token
 at all) are listed and the run hard-errors without writing a manifest — the
-same fail-fast shape as the US-024 guards. The manifest deliberately has no
-task column; task becomes a DAG wildcard when cohort/condition expansion lands
+same fail-fast shape as the US-024 guards. `--exclude PATTERN` (repeatable,
+fnmatch glob against the recording path) removes matching refusals from the
+error and proceeds — an explicit opt-out per run, never a silent skip:
+excluded recordings are still printed to stderr and never enter the manifest.
+The manifest deliberately has no task column; task becomes a DAG wildcard when cohort/condition expansion lands
 (US-015).
 
 Segment order (US-025): per subject, segments order by acquisition start taken
@@ -43,7 +48,9 @@ dropped.
 
 from __future__ import annotations
 
+import argparse
 import csv
+import fnmatch
 import re
 import sys
 from dataclasses import dataclass, field
@@ -101,8 +108,10 @@ def _task_token_of(path: Path) -> str | None:
     return m.group(1) if m else None
 
 
-def _refuse_if_wrong_task(path: Path, task: str, scan: _Scan) -> bool:
+def _refuse_if_wrong_task(path: Path, task: str | None, scan: _Scan) -> bool:
     """Shared task-axis gate. Returns True when the recording was refused."""
+    if task is None:
+        return False  # null task disables the task-axis gate entirely
     token = _task_token_of(path)
     if token is None:
         scan.refusals.append(
@@ -188,7 +197,7 @@ def _index_segments(
     return indexed
 
 
-def _scan_brainvision(data_dir: Path, task: str) -> _Scan:
+def _scan_brainvision(data_dir: Path, task: str | None) -> _Scan:
     """One row per `sub-{id}_task-{configured}.vhdr`; other tasks refused loud."""
     scan = _Scan()
     for vhdr in sorted(data_dir.glob("sub-*/sub-*.vhdr")):
@@ -201,7 +210,7 @@ def _scan_brainvision(data_dir: Path, task: str) -> _Scan:
     return scan
 
 
-def _scan_bids(data_dir: Path, task: str) -> _Scan:
+def _scan_bids(data_dir: Path, task: str | None) -> _Scan:
     """One row per task-matched BIDS EEG recording; extension duplicates collapse."""
     scan = _Scan()
     # key: recording directory + stem without the extension suffix
@@ -229,7 +238,7 @@ def _scan_bids(data_dir: Path, task: str) -> _Scan:
     return scan
 
 
-def _refuse(refusals: list[_Refusal], task: str, fmt: str) -> None:
+def _refuse(refusals: list[_Refusal], task: str | None, fmt: str) -> None:
     """Fail loud (US-024 style): list every splice the scan threw away."""
     print(
         f"create_tsv: {len(refusals)} recording file(s) were NOT catalogued "
@@ -241,20 +250,33 @@ def _refuse(refusals: list[_Refusal], task: str, fmt: str) -> None:
     print(
         "The manifest must stay consistent with the configured task (US-025). "
         "Remove or rename the outlier recordings, point the config at the task "
-        "you actually want, or hand-author the manifest.",
+        "you actually want, hand-author the manifest, or pass --exclude to "
+        "skip these recordings explicitly.",
         file=sys.stderr,
     )
 
 
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
-    config_path = Path(argv[0]) if argv else _CONFIG
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("config", nargs="?", default=str(_CONFIG))
+    parser.add_argument(
+        "--exclude",
+        "-e",
+        action="append",
+        default=[],
+        metavar="PATTERN",
+        help="fnmatch glob against the recording path — matching refusals are "
+        "skipped (printed, never catalogued) instead of hard-erroring",
+    )
+    args = parser.parse_args(argv)
+    config_path = Path(args.config)
     cfg = _load_config(config_path)
     ps = cfg["project_settings"]
     root = config_path.resolve().parent
     data_dir = (root / ps["data_directory"]).resolve()
     fmt = ps["input_format"]
-    task = ps["task"]
+    task = ps.get("task")
 
     def _rel(p: Path) -> str:
         try:
@@ -269,6 +291,24 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(f"Unsupported input_format {fmt!r}", file=sys.stderr)
         return 2
+
+    excluded: list[_Refusal] = []
+    if args.exclude:
+        remaining = []
+        for r in scan.refusals:
+            if any(fnmatch.fnmatch(r.source, pat) for pat in args.exclude):
+                excluded.append(r)
+            else:
+                remaining.append(r)
+        scan.refusals = remaining
+        if excluded:
+            print(
+                f"create_tsv: excluded {len(excluded)} recording file(s) via "
+                "--exclude (not catalogued):",
+                file=sys.stderr,
+            )
+            for r in excluded:
+                print(f"  {r.source} — {r.reason}", file=sys.stderr)
 
     for wm in scan.warnings:
         print(f"WARNING: {wm}", file=sys.stderr)

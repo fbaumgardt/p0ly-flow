@@ -6,8 +6,8 @@ project_settings:
   input_format: "BrainVision" # BrainVision | BIDS
   data_directory: "data/raw/" # BV: root with sub-{id}/ dirs; BIDS: BIDS dataset root
   output_directory: "data/derivatives/"
-  task: "rest" # task label: embedded in BV filenames + BIDS entity
-  montage: "easycap-M1" # MNE builtin montage applied on ingestion
+  task: "rest" # task label: embedded in BV filenames + BIDS entity; null = no task axis (manifest catalogues every recording)
+  montage: "easycap-M1" # MNE builtin montage applied on ingestion when the recording lacks one; null = never apply
 
 subjects:
   - "001" # Bootstrap: single placeholder subject (bare ID)

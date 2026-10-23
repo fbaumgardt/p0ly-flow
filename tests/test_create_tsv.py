@@ -210,3 +210,72 @@ def test_main_filters_and_writes(tmp_path, capsys):
     assert "001\t1\t" in text
     assert "task-dmss" in text
     assert "task-rest" not in text
+
+
+# --- US-013 deferral: --exclude skips matching refusals, prints them loud -------
+
+
+_EXCLUDE_CFG = (
+    "project_settings:\n"
+    "  input_format: BrainVision\n"
+    "  data_directory: data/raw\n"
+    "  task: rest\n"
+    "ingestion:\n"
+    "  manifest: metadata/manifest.tsv\n"
+)
+
+
+def _raw_outlier(tmp_path: Path) -> None:
+    (tmp_path / "data" / "raw" / "sub-001").mkdir(parents=True)
+    good = tmp_path / "data" / "raw" / "sub-001" / "sub-001_task-rest.vhdr"
+    good.write_text("")
+    (tmp_path / "data" / "raw" / "sub-001" / "sub-001_task-video.vhdr").write_text("")
+
+
+def test_exclude_skips_matching_refusal_and_writes(tmp_path, capsys):
+    _raw_outlier(tmp_path)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(_EXCLUDE_CFG)
+    out = tmp_path / "metadata" / "manifest.tsv"
+    rc = create_tsv.main([str(cfg), "--exclude", "*task-video*"])
+    assert rc == 0
+    assert out.exists()
+    text = out.read_text()
+    assert "task-rest" in text
+    assert "task-video" not in text
+    # excluded files are never silently skipped: they are printed, with reason
+    err = capsys.readouterr().err
+    assert "excluded 1 recording file(s)" in err
+    assert "task-video" in err
+
+
+def test_exclude_nonmatching_pattern_still_refuses(tmp_path):
+    _raw_outlier(tmp_path)
+    cfg = tmp_path / "config.yaml"
+    cfg.write_text(_EXCLUDE_CFG)
+    out = tmp_path / "metadata" / "manifest.tsv"
+    rc = create_tsv.main([str(cfg), "--exclude", "*sub-002*"])
+    assert rc == 1
+    assert not out.exists()
+
+
+
+
+# --- US-013 deferral (W27/W28): null task disables the task-axis gate -----------
+
+
+def test_null_task_catalogues_every_recording(tmp_path):
+    d = tmp_path / "sub-001"
+    d.mkdir()
+    (d / "sub-001_task-dmss.vhdr").write_text("")
+    (d / "sub-001_task-rest.vhdr").write_text("")
+    (d / "sub-001.vhdr").write_text("")
+    scan = create_tsv._scan_brainvision(tmp_path, None)
+    # sources come back in the scanner's lexicographic order; the point is
+    # all three recordings pass the (disabled) task gate with zero refusals
+    assert sorted(src for _, src in scan.sources) == [
+        str(d / "sub-001.vhdr"),
+        str(d / "sub-001_task-dmss.vhdr"),
+        str(d / "sub-001_task-rest.vhdr"),
+    ]
+    assert scan.refusals == []
