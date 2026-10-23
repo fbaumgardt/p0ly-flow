@@ -9,6 +9,10 @@ with channel-set + method + frequency-grid guards), writing
 ``group_analysis/{timelock}/{condition}_desc-conn_ave.npz`` in the same
 archive layout (one adjacency array per method + ``ch_names`` + ``freqs``).
 
+``config.yaml connectivity.fisher_z_average`` selects the averaging space
+(US-013 deferral): the plain arithmetic mean (default, historical outputs)
+or Fisher-z averaging (arctanh with the itpc_z ceiling clip, tanh back).
+
 Note: no `from __future__ import annotations` — Snakemake's `script:` directive
 prepends a preamble before this file's body, and __future__ imports must be the
 first statement (flagged during US-007).
@@ -33,7 +37,10 @@ def _read(path: str) -> ConnectivityMatrices:
         )
 
 
-average = group_connectivity([_read(str(path)) for path in snakemake.input.subject_conns])  # type: ignore[name-defined]
+average = group_connectivity(  # type: ignore[name-defined]
+    [_read(str(path)) for path in snakemake.input.subject_conns],
+    fisher_z=bool(snakemake.params.fisher_z),
+)
 payload: dict[str, object] = {
     "ch_names": np.array(average.ch_names),
     "freqs": average.freqs,

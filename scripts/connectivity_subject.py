@@ -30,6 +30,8 @@ result = spectral_connectivity(
     methods=settings["methods"],
     fmin=settings["fmin"],
     fmax=settings["fmax"],
+    mode=settings["mode"],
+    n_jobs=settings["n_jobs"],
     condition_query=p.condition_query if p.condition_query else None,
 )
 payload: dict[str, object] = {

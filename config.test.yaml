@@ -115,6 +115,9 @@ connectivity:
   methods: ["wpli", "coh", "plv"]
   fmin: 4.0
   fmax: 45.0
+  mode: "multitaper"
+  n_jobs: 1
+  fisher_z_average: false
   min_edge_weight: 0.1
   bands:
     theta: [4, 8]

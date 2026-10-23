@@ -996,6 +996,7 @@ rule connectivity_group_average:
         ave=_CONN_GROUP_OUT,
     params:
         methods=lambda wildcards: _CONN_SETTINGS["methods"],
+        fisher_z=lambda wildcards: _CONN_SETTINGS["fisher_z_average"],
     log:
         "logs/group/connectivity_group_average_{timelock}_{cohort}_{condition}.log",
     script:
