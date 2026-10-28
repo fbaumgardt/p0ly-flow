@@ -570,6 +570,63 @@ _VARIABILITY_TARGETS = (
     else []
 )
 
+# --- Decoding Analysis Layer (US-030) ---
+#
+# Within-subject MVPA of categorical `Epochs.metadata` columns (PRD §5.2):
+# per-(subject × timelock × target) time-resolved or temporal-generalization
+# scores, then an equal-subject-weight cohort mean. No condition splits, no
+# cross-subject pooling, no statistics — the library owns estimator/CV/scoring
+# (p0ly_utils.analysis.decode_epochs / group_decoding).
+import re
+
+_DECODING_ENABLED = config["analysis"]["run_decoding"]
+_DECODING = config.get("decoding", {})
+if _DECODING_ENABLED and not _DECODING:
+    raise ValueError("analysis.run_decoding is true but config.yaml has no decoding: block")
+
+# Targets are metadata column names *and* filename components. Restrict them
+# at parse time so a configured target can never introduce path ambiguity.
+_DECODING_TARGET_PATTERN = r"[A-Za-z_][A-Za-z0-9_]*"
+_DECODING_TARGETS_CONFIG = _DECODING.get("targets", [])
+if not isinstance(_DECODING_TARGETS_CONFIG, list):
+    # `targets: Correct` would silently explode into per-character targets.
+    raise ValueError(
+        f"decoding.targets must be a list of metadata column names, got "
+        f"{_DECODING_TARGETS_CONFIG!r} (write ['Correct'], not 'Correct')"
+    )
+if _DECODING_ENABLED and not _DECODING_TARGETS_CONFIG:
+    # An enabled analysis with no targets would schedule zero decoding jobs.
+    raise ValueError("analysis.run_decoding is true but decoding.targets is empty or missing")
+for _target in _DECODING_TARGETS_CONFIG:
+    if not isinstance(_target, str) or not re.fullmatch(_DECODING_TARGET_PATTERN, _target):
+        raise ValueError(
+            f"decoding.targets entry {_target!r} is not a safe metadata column name "
+            f"({_DECODING_TARGET_PATTERN})"
+        )
+
+# Per-subject archives: fold + mean scores + the configuration that produced
+# them (see scripts/decoding_subject.py for the full key list). Cohort-tier
+# group layout (US-015): {cohort} directory between {timelock} and the file.
+_DECODE_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{target}}_desc-decode.npz"
+)
+_DECODE_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{target}}_desc-decode_ave.npz"
+)
+
+# `rule all` decoding target expansion (empty when analysis.run_decoding is
+# false); per-subject archives stay intermediates feeding the group rule.
+_DECODING_TARGETS = (
+    expand(
+        _DECODE_GROUP_OUT,
+        timelock=_TIMELOCKS,
+        cohort=_COHORTS,
+        target=_DECODING_TARGETS_CONFIG,
+    )
+    if _DECODING_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -661,6 +718,9 @@ rule all:
         # US-029: across-trial variability maps when enabled in config
         # (analysis.run_variability; descriptive only — no inferential output).
         _VARIABILITY_TARGETS,
+        # US-030: within-subject decoding (AUC + accuracy) per (subject, timelock,
+        # condition, target) when enabled in config (analysis.run_decoding).
+        _DECODING_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -1571,3 +1631,70 @@ rule run_variability:
         "logs/group/run_variability_{timelock}_{cohort}_{condition}.log",
     script:
         "scripts/run_variability.py"
+
+
+# --- Decoding Layer (US-030, ADR-007) ---
+
+rule decoding_subject:
+    """Within-subject decoding scores for one (subject, timelock, target).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying the aligned trial metadata) and calls
+    ``p0ly_utils.analysis.decode_epochs`` with the ``config.yaml decoding``
+    settings. All label parsing, estimator construction, cross-validation and
+    scoring live in the library — this script only serializes the result.
+    Every subject is fit and scored on its own trials (no pooled input files);
+    classes need at least ``n_splits`` trials or the library fails loud.
+    Output is an ``.npz`` archive: ``scores``, ``fold_scores``, ``times``
+    (plus ``train_times``/``test_times`` in temporal-generalization mode) and
+    the scalar configuration (target, classes, class_counts, scoring,
+    chance_level, mode, n_splits, n_epochs, seed, estimator).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        decode=_DECODE_SUBJECT_OUT,
+    params:
+        target="{target}",
+        mode=lambda wildcards: _DECODING["mode"],
+        estimator=lambda wildcards: _DECODING["estimator"],
+        estimator_params=lambda wildcards: _DECODING["estimator_params"],
+        n_splits=lambda wildcards: _DECODING["n_splits"],
+        scoring=lambda wildcards: _DECODING["scoring"],
+        seed=lambda wildcards: _DECODING["seed"],
+        n_jobs=lambda wildcards: _DECODING["n_jobs"],
+    log:
+        "logs/sub-{subject}/decoding_subject_{timelock}_{target}.log",
+    script:
+        "scripts/decoding_subject.py"
+
+
+rule run_decoding:
+    """Equal-subject-weight cohort mean of the per-subject decoding scores.
+
+    Consumes the per-subject ``desc-decode.npz`` archives (rule
+    decoding_subject — one read, not N subject re-reads) and writes
+    ``group_analysis/{timelock}/{cohort}/{target}_desc-decode_ave.npz`` via
+    ``p0ly_utils.analysis.group_decoding``. Trials are never pooled across
+    subjects: each subject contributes its already-cross-validated scores with
+    one equal weight, independent of epoch counts. Archives must share target,
+    mode, scoring, class order, chance level, time grid and score shape (the
+    library fails loud otherwise); a single-subject cohort is valid.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_decodes=lambda wildcards: expand(
+            _DECODE_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+            target=wildcards.target,
+        ),
+    output:
+        ave=_DECODE_GROUP_OUT,
+    log:
+        "logs/group/run_decoding_{timelock}_{cohort}_{target}.log",
+    script:
+        "scripts/run_decoding.py"

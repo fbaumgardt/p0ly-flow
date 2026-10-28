@@ -128,6 +128,31 @@ variability:
   power:
     measures: [sd, fano, cv]
 
+decoding:
+  # US-030: within-subject MVPA for the decoding_subject / run_decoding rules
+  # (read when analysis.run_decoding is true). `targets` are categorical
+  # Epochs.metadata columns; the set is restricted to
+  # [A-Za-z_][A-Za-z0-9_]* at DAG-parse time (target names are filename
+  # components). Every distinct value is a class; each class needs at least
+  # n_splits trials, otherwise the rule fails loud. mode: time_resolved
+  # (scores (n_times,)) | temporal_generalization (scores
+  # (n_train_times, n_test_times)). estimator is logistic_regression only;
+  # estimator_params allows C / max_iter / class_weight. scoring: accuracy |
+  # balanced_accuracy (chance = 1 / n_classes for both). seed makes the
+  # stratified fold shuffle and classifier resampling reproducible. n_jobs
+  # parallelizes across time points only (scores do not depend on it).
+  targets: [Correct]
+  mode: time_resolved
+  estimator: logistic_regression
+  estimator_params:
+    C: 1.0
+    max_iter: 1000
+    class_weight: null
+  n_splits: 5
+  scoring: accuracy
+  seed: 20261020
+  n_jobs: 1
+
 connectivity:
   # US-013: spectral connectivity for the connectivity_subject /
   # connectivity_group_average / run_connectivity rules (read when
