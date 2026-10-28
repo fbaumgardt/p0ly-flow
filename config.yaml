@@ -142,6 +142,24 @@ connectivity:
     beta: [12, 30]
     gamma: [30, 45]
 
+regression:
+  # US-014: single-trial OLS predictors for the regression_subject /
+  # run_regression rules (read when analysis.run_regression is true). One
+  # model per (subject, timelock) is fit on ALL retained trials: intercept
+  # + every `continuous` column (numeric, never standardized — beta units
+  # are response units per predictor unit) + every `categorical` column
+  # reference-coded against its lexicographically first level (`column[level]`
+  # dummy terms, betas are differences from that reference). At least one of
+  # the two lists must be non-empty when enabled; rows with a null/non-finite
+  # predictor are excluded and counted in the artifact. Explanatory
+  # within-subject estimation only — no decoding, no contrasts/inference.
+  signal_domain: voltage # voltage (epochs.get_data()) | power (per-epoch TFR power)
+  continuous: [RT] # numeric metadata columns; may be []
+  categorical: [Correct] # reference-coded metadata columns; may be []
+  # signal_domain: power reuses the `tfr:` block above for the transform
+  # (fmin/fmax/step/method/n_cycles/time_bandwidth/decim) even when
+  # analysis.run_tfr is false; no log power is applied.
+
 analysis:
   run_erp: false
   run_psd: false

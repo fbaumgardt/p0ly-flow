@@ -25,8 +25,11 @@ Enable in `config.yaml` under `analysis:`; parameters live in the matching `conf
 | **PSD** | `psd_*`, `run_psd` | Welch spectra per condition, band powers, aperiodic (1/f) fits |
 | **TFR** | `tfr_*`, `run_tfr`, `run_tfr_cluster` | Power and ITPC grand averages, TFR cluster-permutation |
 | **Connectivity** | `connectivity_subject`, `connectivity_group_average`, `run_connectivity`, `connectivity_contrast` | Spectral connectivity (wPLI/coh/PLV) grand averages (plain or Fisher-z), band-averaged graph metrics, per-contrast difference graphs |
+| **Regression** | `regression_subject`, `run_regression` | Single-trial OLS beta maps per term (declared `regression.continuous` / `regression.categorical` metadata predictors) for voltage or TFR power, plus equal-subject-weight cohort means |
 
 Statistics are defined per their group level: cluster-permutation rules need the configured subject cohorts; grand averages, difference graphs, PSD/TFR summaries are defined for any n.
+
+Regression is explanatory within-subject OLS, not decoding or inference: one model per (subject, timelock) on all retained trials. Predictors are declared in `regression:` (`signal_domain: voltage | power`, `continuous: [...]`, `categorical: [...]` — at least one non-empty when `analysis.run_regression` is true); the power domain reuses the `tfr:` block for the transform even when `analysis.run_tfr` is false. There is no condition wildcard and no cohort-level statistic — cohort files are equal-subject-weight means of the per-subject beta maps.
 
 ## Usage
 
