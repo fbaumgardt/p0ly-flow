@@ -159,6 +159,39 @@ regression:
   # signal_domain: power reuses the `tfr:` block above for the transform
   # (fmin/fmax/step/method/n_cycles/time_bandwidth/decim) even when
   # analysis.run_tfr is false; no log power is applied.
+cfc:
+  # US-027: within-channel cross-frequency coupling for the cfc_subject /
+  # cfc_group_average / run_cfc rules (read when analysis.run_cfc is true).
+  # methods: pac (tensorpac) + phase_phase (Hilbert n:m); phase_freqs /
+  # amp_freqs declare CENTER grids (built into the inclusive [fmin, fmax]
+  # grid with step, via freq_grid), and the bandwidths are FULL band widths:
+  # every filter band is [f - bandwidth/2, f + bandwidth/2]. Guarded at
+  # runtime: strictly increasing grids with >= 2 bins, positive widths, every
+  # low edge > 0 Hz and every high edge < sfreq/2.
+  methods: [pac, phase_phase]
+  pac_method: gaussian_copula   # gaussian_copula | mean_vector_length (probe-verified)
+  phase_freqs:
+    fmin: 4.0
+    fmax: 12.0
+    step: 2.0
+    bandwidth: 2.0              # full width, Hz
+  amp_freqs:
+    fmin: 20.0
+    fmax: 45.0
+    step: 5.0
+    bandwidth: 4.0              # full width, Hz
+  ratios: [[2, 1], [3, 1]]      # f_amp / f_phase = n / m (positive, coprime)
+  ratio_tolerance: 0.5          # absolute Hz; off-ratio PPC cells = NaN
+  # Subject nulls are retained in full (n_surrogates x n_channels x n_phase x
+  # n_amp) — that array IS the subject-level evidence, so archive size grows
+  # linearly with this count. Cohort contrasts do NOT use it.
+  n_surrogates: 200
+  # Cohort sign flips: exact when 2 ** (n_subjects - 1) <= n_permutations,
+  # else this many seeded random patterns (observed all-+ always included).
+  # Full-map max-|statistic| correction, one family per method.
+  n_permutations: 1024
+  seed: 20261020
+  n_jobs: 1
 
 analysis:
   run_erp: false

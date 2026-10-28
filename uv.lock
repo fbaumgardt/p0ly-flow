@@ -935,6 +935,7 @@ dependencies = [
     { name = "h5io" },
     { name = "p0ly-utils" },
     { name = "snakemake" },
+    { name = "tensorpac" },
 ]
 
 [package.dev-dependencies]
@@ -948,6 +949,7 @@ requires-dist = [
     { name = "h5io", specifier = ">=0.2.5" },
     { name = "p0ly-utils", editable = "../p0ly-eeg" },
     { name = "snakemake", specifier = ">=9.0" },
+    { name = "tensorpac", specifier = "==0.6.5" },
 ]
 
 [package.metadata.requires-dev]
@@ -1818,6 +1820,20 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/47/c6/ee486fd809e357697ee8a44d3d69222b344920433d3b6666ccd9b374630c/tenacity-9.1.4.tar.gz", hash = "sha256:adb31d4c263f2bd041081ab33b498309a57c77f9acf2db65aadf0898179cf93a", size = 49413, upload-time = "2026-02-07T10:45:33.841Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d7/c1/eb8f9debc45d3b7918a32ab756658a0904732f75e555402972246b0b8e71/tenacity-9.1.4-py3-none-any.whl", hash = "sha256:6095a360c919085f28c6527de529e76a06ad89b23659fa881ae0649b867a9d55", size = 28926, upload-time = "2026-02-07T10:45:32.24Z" },
+]
+
+[[package]]
+name = "tensorpac"
+version = "0.6.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "joblib" },
+    { name = "numpy" },
+    { name = "scipy" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/34/4c/b7cab0522f4e9601a7e44d14d250801267d20848498426da875f53896bab/tensorpac-0.6.5.tar.gz", hash = "sha256:a23511f13a38464a428504f890377b8664145b7c094dd5faa0adeb1fddfde248", size = 388109, upload-time = "2020-07-30T12:18:12.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/4a/74/8818a87c860f24dff6f22032cf3a6464d9aa7875db474fa676df0d919682/tensorpac-0.6.5-py3-none-any.whl", hash = "sha256:579d65a0ba85400886dcf4074d5704d334ec9543bcf2d8cd2a6d9f63f37e57d0", size = 423638, upload-time = "2020-07-30T12:18:09.03Z" },
 ]
 
 [[package]]

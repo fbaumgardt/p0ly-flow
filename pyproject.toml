@@ -11,6 +11,10 @@ dependencies = [
     "h5io>=0.2.5",
     "p0ly-utils",
     "snakemake>=9.0",
+    # US-027: the CFC rules call p0ly_utils.analysis.cfc, whose PAC path
+    # imports tensorpac. Pinned to the story-verified version so the flow
+    # runtime env carries it whether or not the path dep resolves first.
+    "tensorpac==0.6.5",
 ]
 
 [tool.uv]

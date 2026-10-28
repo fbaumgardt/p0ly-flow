@@ -26,8 +26,15 @@ Enable in `config.yaml` under `analysis:`; parameters live in the matching `conf
 | **TFR** | `tfr_*`, `run_tfr`, `run_tfr_cluster` | Power and ITPC grand averages, TFR cluster-permutation |
 | **Connectivity** | `connectivity_subject`, `connectivity_group_average`, `run_connectivity`, `connectivity_contrast` | Spectral connectivity (wPLI/coh/PLV) grand averages (plain or Fisher-z), band-averaged graph metrics, per-contrast difference graphs |
 | **Regression** | `regression_subject`, `run_regression` | Single-trial OLS beta maps per term (declared `regression.continuous` / `regression.categorical` metadata predictors) for voltage or TFR power, plus equal-subject-weight cohort means |
+| **CFC** | `cfc_subject`, `cfc_group_average`, `run_cfc` | Within-channel PAC + n:m phase-phase coupling maps with full surrogate nulls per subject, equal-subject descriptive cohort means, subject-unit condition contrasts with full-map corrected p-values |
 
-Statistics are defined per their group level: cluster-permutation rules need the configured subject cohorts; grand averages, difference graphs, PSD/TFR summaries are defined for any n.
+Statistics are defined per their group level: cluster-permutation and CFC contrast rules need the configured subject cohorts (CFC contrasts are omitted loudly below 2 subjects — exact sign flips give an n=2 p-value floor of 1/3); grand averages, difference graphs, PSD/TFR summaries, and CFC descriptive means are defined for any n.
+
+CFC artifacts (compressed `.npz`, `config.yaml cfc` block):
+
+- `sub-{subject}/sub-{subject}_{timelock}_{condition}_desc-cfc.npz` — per method key (`pac`, `ppc_2x1`, ...) `__observed`, `__null` (the full surrogate distribution, retained on purpose), `__p_values`, `__valid_mask`; `evidence_level="subject"` (uncorrected subject-level evidence, not a cohort claim).
+- `group_analysis/{timelock}/{cohort}/{condition}_desc-cfc_ave.npz` — per method `__mean` + `__valid_mask`; no averaged p-values (`evidence_level="cohort_descriptive"`).
+- `group_analysis/{timelock}/{cohort}/{contrast}_cfcperm.npz` — per method `__difference`, `__pvalues_corrected`, `__null_max`, `__valid_mask` (`evidence_level="cohort_subject_unit"`).
 
 Regression is explanatory within-subject OLS, not decoding or inference: one model per (subject, timelock) on all retained trials. Predictors are declared in `regression:` (`signal_domain: voltage | power`, `continuous: [...]`, `categorical: [...]` — at least one non-empty when `analysis.run_regression` is true); the power domain reuses the `tfr:` block for the transform even when `analysis.run_tfr` is false. There is no condition wildcard and no cohort-level statistic — cohort files are equal-subject-weight means of the per-subject beta maps.
 

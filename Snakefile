@@ -22,6 +22,7 @@ _META = config["metadata"]
 # (``ExperimentSpec.timelocks`` keys) so no timelock literals live in the
 # Snakefile. ``p0ly_utils`` is already a dependency, so the spec is loaded at
 # DAG-parse time.
+from p0ly_utils.analysis import freq_grid
 from p0ly_utils.metadata import ExperimentSpec
 
 _TIMELOCKS = list(ExperimentSpec.from_yaml(_META["experiment_spec"]).timelocks.keys())
@@ -410,6 +411,97 @@ _REG_TARGETS = (
     if _REG_ENABLED
     else []
 )
+# --- Cross-Frequency Coupling Layer (US-027) ---
+#
+# Within-channel PAC (tensorpac, Gaussian-copula default) + n:m phase-phase
+# coupling (Hilbert phases, mean resultant length) per (subject x timelock x
+# condition) -> per-method map (n_channels, n_phase_freqs, n_amp_freqs) with a
+# full surrogate null, equal-subject descriptive cohort means, and one
+# subject-as-unit condition contrast with full-map max-statistic correction.
+# Mirrors the connectivity/TFR layers (ADR-007): the condition set is shared
+# with ERP (_ERP_QUERIES), artifacts sit under the cohort-tier group layout.
+#
+# Evidence split: subject maps/null/p-values are subject-level descriptive
+# evidence (uncorrected); the cohort average is descriptive only (no averaged
+# p-values); only `run_cfc` is inference, and it runs on per-subject observed
+# maps — never on subject surrogate p-values.
+_CFC_ENABLED = config["analysis"]["run_cfc"]
+_CFC_QUERIES = _ERP_QUERIES
+
+
+def _cfc_grid(section: dict) -> list[float]:
+    """Inclusive center grid from config (same builder as every other grid)."""
+    return [float(f) for f in freq_grid(section["fmin"], section["fmax"], section["step"])]
+
+
+_CFC_SETTINGS: dict[str, object] = {}
+if _CFC_ENABLED:
+    _CFC = config["cfc"]
+    _CFC_SETTINGS = {
+        "methods": list(_CFC["methods"]),
+        "pac_method": str(_CFC["pac_method"]),
+        "phase_freqs": _cfc_grid(_CFC["phase_freqs"]),
+        "amp_freqs": _cfc_grid(_CFC["amp_freqs"]),
+        # bandwidths are FULL widths: band = [f - w/2, f + w/2]
+        "phase_bandwidth": float(_CFC["phase_freqs"]["bandwidth"]),
+        "amp_bandwidth": float(_CFC["amp_freqs"]["bandwidth"]),
+        "ratios": [[int(n), int(m)] for n, m in _CFC["ratios"]],
+        "ratio_tolerance": float(_CFC["ratio_tolerance"]),
+        "n_surrogates": int(_CFC["n_surrogates"]),
+        "n_permutations": int(_CFC["n_permutations"]),
+        "seed": _CFC["seed"],
+        "n_jobs": int(_CFC["n_jobs"]),
+    }
+
+# Per-subject condition CFC maps + full surrogate null (rule cfc_subject):
+# `<key>__observed` / `<key>__null` / `<key>__p_values` / `<key>__valid_mask`
+# per method key (`pac`, `ppc_2x1`, ...) in a compressed .npz archive.
+_CFC_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-cfc.npz"
+)
+# Descriptive cohort mean (rule cfc_group_average) at any n >= 1: observed
+# maps only, no averaged p-values, off-ratio NaN cells preserved.
+_CFC_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{condition}}_desc-cfc_ave.npz"
+)
+# Subject-as-unit contrast + full-map corrected p-values (rule run_cfc).
+_CFC_CONTRAST_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{contrast}}_cfcperm.npz"
+)
+# Cohort inference needs >= 2 paired subjects per cohort (US-015 gate, shared
+# with the ERP/TFR statistics). Exact sign-flip enumeration tops out at
+# 2 ** (n_subjects - 1) null maxima, so small cohorts cannot reach p < 0.05 —
+# see the run_cfc docstring and SCHEMA.
+_CFC_CONTRAST_COHORTS = _CLUSTER_COHORTS
+if _CFC_ENABLED:
+    for _cohort in _COHORTS:
+        if _cohort not in _CFC_CONTRAST_COHORTS:
+            print(
+                f"run_cfc: cohort {_cohort!r} has "
+                f"{len(_COHORT_SUBJECTS[_cohort])} subject(s) — CFC cohort "
+                "contrast targets omitted from the DAG for this cohort "
+                "(descriptive maps remain valid at n=1; re-parse after adding "
+                "subjects for inference)"
+            )
+
+# `rule all` CFC target expansion (empty when analysis.run_cfc is false).
+_CFC_TARGETS: list[str]
+if _CFC_ENABLED:
+    _CFC_TARGETS = expand(
+        _CFC_GROUP_OUT,
+        timelock=_TIMELOCKS,
+        cohort=_COHORTS,
+        condition=list(_CFC_QUERIES),
+    )
+    if _ERP_CONTRASTS:
+        _CFC_TARGETS += expand(
+            _CFC_CONTRAST_OUT,
+            timelock=_TIMELOCKS,
+            cohort=_CFC_CONTRAST_COHORTS,
+            contrast=list(_ERP_CONTRASTS),
+        )
+else:
+    _CFC_TARGETS = []
 
 # --- Wildcard Constraints ---
 wildcard_constraints:
@@ -496,6 +588,9 @@ rule all:
         # US-014: equal-subject-weight regression beta maps when enabled in
         # config (analysis.run_regression; no statistics in this module).
         _REG_TARGETS,
+        # US-027: CFC descriptive cohort maps at any n, plus the subject-unit
+        # contrast with full-map correction for cohorts with >= 2 subjects.
+        _CFC_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -1211,3 +1306,129 @@ rule run_regression:
         "logs/group/run_regression_{timelock}_{cohort}.log",
     script:
         "scripts/run_regression.py"
+
+
+# --- Cross-Frequency Coupling Rules (US-027) ---
+# ADR-007 three-rule topology: per-subject maps (with their full surrogate
+# nulls) feed a descriptive cohort mean and the subject-unit contrast. All
+# math lives in p0ly_utils.analysis (DoD: no coupling/null/averaging logic in
+# rule scripts); the scripts deserialize, call one library function, and save.
+rule cfc_subject:
+    """PAC + n:m PPC maps for one subject's (timelock, condition).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata), selects the condition via its ``metadata.eval``
+    query from ``config.yaml group_aggregation.condition_splits`` (the
+    reserved ``all_trials`` condition applies no query), and calls
+    ``p0ly_utils.analysis.estimate_cfc`` with ``config.yaml cfc`` grids,
+    bandwidths, ratios, surrogate count and seed. One call covers every
+    configured method: PAC (tensorpac Gaussian-copula by default, all channels
+    in one call) and each integer-ratio n:m phase-phase map (Hilbert phases,
+    mean resultant length). Fails loud on zero query matches, sub-Nyquist or
+    negative band edges, too few trials/samples, and off-ratio
+    ``ratio_tolerance`` settings (US-024 philosophy).
+
+    Output is a compressed ``desc-cfc.npz`` archive — per method ``<key>``
+    (``pac``, ``ppc_2x1``, ...) the observed map
+    ``(n_channels, n_phase_freqs, n_amp_freqs)``, the full surrogate null
+    ``(n_surrogates, n_channels, n_phase_freqs, n_amp_freqs)``, the one-sided
+    empirical p-values and the valid-cell mask, plus shared axes and
+    ``evidence_level="subject"`` (descriptive, uncorrected — NOT cohort
+    evidence).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        cfc=_CFC_SUBJECT_OUT,
+    params:
+        subject="{subject}",
+        condition="{condition}",
+        condition_query=lambda wildcards: _CFC_QUERIES[wildcards.condition],
+        cfc=_CFC_SETTINGS,
+    log:
+        "logs/sub-{subject}/cfc_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/cfc_subject.py"
+
+
+rule cfc_group_average:
+    """Equal-subject-weight descriptive CFC mean across a cohort (any n >= 1).
+
+    Consumes the cohort's per-subject ``desc-cfc.npz`` archives (rule
+    cfc_subject, US-015 cohort-restricted) and calls
+    ``p0ly_utils.analysis.group_cfc`` — arithmetic subject mean with
+    channel-set / method / grid / valid-mask guards. Only **observed** maps are
+    read: subject nulls and p-values never enter cohort math, so the archive
+    carries no averaged p-values (``evidence_level="cohort_descriptive"``).
+    Valid at n=1; off-ratio PPC cells stay NaN.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_maps=lambda wildcards: expand(
+            _CFC_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_CFC_GROUP_OUT,
+    log:
+        "logs/group/cfc_group_average_{timelock}_{cohort}_{condition}.log",
+    script:
+        "scripts/cfc_group_average.py"
+
+
+rule run_cfc:
+    """Subject-unit CFC condition contrast with full-map correction (US-027).
+
+    Inputs are the cohort's per-subject condition archives for both contrast
+    arms (rule cfc_subject — the paired test needs the per-subject maps, not
+    the descriptive averages). ``p0ly_utils.analysis.cfc_condition_contrast``
+    builds per-subject ``first - second`` difference maps, flips each
+    subject's whole difference map under the null (first subject fixed to
+    +1 to remove global sign symmetry), takes the max |statistic| over each
+    method's valid cells per resample, and corrects every observed cell with
+    that full-map max distribution:
+
+        p_corrected = (1 + #null_max >= |observed|) / (n_resamples + 1)
+
+    Exact enumeration yields ``2 ** (n_subjects - 1)`` null maxima when that
+    fits under ``cfc.n_permutations``, otherwise that many seeded random
+    patterns (observed all-+ included once). Small cohorts therefore have a
+    p-value floor (n=2 -> 1/3, n=6 -> 1/33); the DAG omits these targets for
+    cohorts with < 2 subjects (see _CFC_CONTRAST_COHORTS). Subject surrogate
+    p-values are never combined here — the library signature accepts observed
+    maps only.
+
+    Output (cohort-tier under group_analysis/{timelock}/{cohort}/): per method
+    ``<key>__difference``, ``<key>__pvalues_corrected``, ``<key>__null_max``,
+    ``<key>__valid_mask``, plus shared axes, ``conditions``, subject/permutation
+    counts, ``correction`` and ``evidence_level="cohort_subject_unit"``.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        maps_first=lambda wildcards: expand(
+            _CFC_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][0],
+        ),
+        maps_second=lambda wildcards: expand(
+            _CFC_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+            condition=_ERP_CONTRASTS[wildcards.contrast][1],
+        ),
+    output:
+        perm=_CFC_CONTRAST_OUT,
+    params:
+        conditions=lambda wildcards: _ERP_CONTRASTS[wildcards.contrast],
+        stats=_CFC_SETTINGS,
+    log:
+        "logs/group/run_cfc_{timelock}_{cohort}_{contrast}.log",
+    script:
+        "scripts/run_cfc.py"
