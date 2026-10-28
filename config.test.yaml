@@ -21,6 +21,10 @@
 #   * analysis.run_tfr: true             -> exercises the US-012 TFR rules
 #                                          end-to-end (power + ITPC +
 #                                          difference map; no n >= 2 gating)
+#   * analysis.run_regression: true      -> exercises the US-014 regression
+#                                          rules end-to-end (per-subject OLS
+#                                          beta maps + equal-weight cohort
+#                                          mean; no statistics)
 # Everything else mirrors config.yaml so the smoke run exercises the real chain.
 
 project_settings:
@@ -108,6 +112,17 @@ tfr:
   n_permutations: 128
   seed: 20261020
 
+regression:
+  # US-014: single-trial OLS predictors (see config.yaml for the full key
+  # documentation). The smoke run exercises the real voltage-domain design
+  # end-to-end with one continuous + one categorical predictor. `Onset`
+  # stands in for `RT` because the synthetic fixture's probe->response
+  # interval is constant (every RT == 0.300781 s), which the library
+  # correctly rejects as a rank-deficient design.
+  signal_domain: voltage
+  continuous: [Onset]
+  categorical: [Correct]
+
 connectivity:
   # US-013: connectivity settings (see config.yaml for the full key
   # documentation). Same grid/threshold as config.yaml — the smoke run
@@ -131,5 +146,5 @@ analysis:
   run_tfr: true
   run_connectivity: true
   run_cfc: false
-  run_regression: false
+  run_regression: true
   run_decoding: false

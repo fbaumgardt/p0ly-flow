@@ -362,6 +362,55 @@ if _CONN_ENABLED:
 else:
     _CONN_TARGETS = []
 
+# --- Regression Analysis Layer (US-014) ---
+#
+# Single-trial OLS per (subject × timelock) of all retained trials on the
+# declared ``regression:`` metadata predictors -> per-subject NPZ beta maps +
+# equal-subject-weight cohort mean. No condition wildcard and no timelock
+# contrasts: the model estimates declared predictors over the full trial set
+# (condition splits are decoding/CFC concerns), and cohort outputs carry no
+# inferential statistics. Power-domain regressions reuse the existing ``tfr:``
+# transform settings even when ``analysis.run_tfr`` is false (all transforms
+# live in p0ly-eeg — see the library regression module).
+_REG_ENABLED = config["analysis"]["run_regression"]
+_REG_SETTINGS = config.get("regression", {}) if _REG_ENABLED else {}
+_REG_DOMAIN = _REG_SETTINGS.get("signal_domain", "voltage")
+if _REG_ENABLED:
+    if _REG_DOMAIN not in ("voltage", "power"):
+        raise ValueError(
+            f"regression.signal_domain must be 'voltage' or 'power', got "
+            f"{_REG_DOMAIN!r}"
+        )
+    if not (
+        _REG_SETTINGS.get("continuous") or _REG_SETTINGS.get("categorical")
+    ):
+        raise ValueError(
+            "analysis.run_regression needs at least one declared predictor in "
+            "regression.continuous or regression.categorical"
+        )
+# Power regressions need the tfr grid/settings regardless of run_tfr.
+_REG_TFR_SETTINGS = (
+    config["tfr"] if _REG_ENABLED and _REG_DOMAIN == "power" else {}
+)
+
+# Per-subject NPZ beta maps (rule regression_subject) and the cohort mean
+# (rule run_regression). Cohort-tier layout (PRD §6); the cohort file is the
+# only `desc-regression` name in it, so no condition wildcard is needed.
+_REG_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-regression.npz"
+)
+_REG_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/desc-regression_ave.npz"
+)
+
+# `rule all` regression target expansion (empty when analysis.run_regression
+# is false); per-subject maps stay intermediates feeding the cohort rule.
+_REG_TARGETS = (
+    expand(_REG_GROUP_OUT, timelock=_TIMELOCKS, cohort=_COHORTS)
+    if _REG_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -444,6 +493,9 @@ rule all:
         # enabled in config (analysis.run_connectivity; no n >= 2 gating —
         # graph metrics of a grand average are defined at n=1).
         _CONN_TARGETS,
+        # US-014: equal-subject-weight regression beta maps when enabled in
+        # config (analysis.run_regression; no statistics in this module).
+        _REG_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -1089,3 +1141,73 @@ rule connectivity_contrast:
         "logs/group/connectivity_contrast_{timelock}_{cohort}_{contrast}.log",
     script:
         "scripts/connectivity_contrast.py"
+
+
+# --- Regression Analysis Layer (US-014) ---
+# Two rules: per-subject OLS beta maps, then the equal-subject-weight cohort
+# mean. Both are thin I/O shims — design-matrix construction, validation and
+# the solve live in p0ly_utils.analysis (DoD: no algorithm logic in scripts).
+rule regression_subject:
+    """OLS beta maps for one subject's timelock over all retained trials.
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata) and calls
+    ``p0ly_utils.analysis.regression_epochs`` with the ``config.yaml
+    regression:`` predictor declaration — ``signal_domain`` (voltage |
+    power), ``continuous`` numeric columns and ``categorical``
+    reference-coded columns. The library owns the design matrix, the
+    complete-case exclusion bookkeeping and the OLS solve; the power domain
+    reuses the ``tfr:`` block (passed as ``params.tfr``) even when
+    ``analysis.run_tfr`` is false. Rows with unusable predictors are
+    excluded loudly and counted, and invalid designs fail the job rather
+    than being silently dropped.
+
+    Output: ``sub-{subject}_{timelock}_desc-regression.npz`` — ``betas``
+    with the domain-specific leading term axis
+    ``(n_terms, n_channels, n_times)`` / ``(n_terms, n_channels, n_freqs,
+    n_times)``, ``terms``, ``ch_names``, ``times``, ``freqs`` (power only),
+    ``domain``, ``reference_levels_json``, ``n_input``, ``n_used``,
+    ``n_excluded``, ``excluded_rows`` (SCHEMA §regression).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        npz=_REG_SUBJECT_OUT,
+    params:
+        regression=_REG_SETTINGS,
+        tfr=_REG_TFR_SETTINGS,
+    log:
+        "logs/sub-{subject}/regression_subject_{timelock}.log",
+    script:
+        "scripts/regression_subject.py"
+
+
+rule run_regression:
+    """Equal-subject-weight cohort mean of the per-subject beta maps.
+
+    Inputs are the cohort's per-subject ``desc-regression.npz`` archives
+    (rule regression_subject, US-015 cohort membership) — never the original
+    epochs, so the cohort value cannot become a pooled-trial estimate.
+    ``p0ly_utils.analysis.group_regression`` averages the subject maps with
+    equal subject weight and guards domain, term order, reference levels,
+    channel set and response grid. Output:
+    ``group_analysis/{timelock}/{cohort}/desc-regression_ave.npz`` (same
+    payload minus the exclusion bookkeeping, plus ``n_subjects`` and
+    ``n_trials_used_total``). No inferential output lives here.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_npzs=lambda wildcards: expand(
+            _REG_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+        ),
+    output:
+        ave=_REG_GROUP_OUT,
+    log:
+        "logs/group/run_regression_{timelock}_{cohort}.log",
+    script:
+        "scripts/run_regression.py"
