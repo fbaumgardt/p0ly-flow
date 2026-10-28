@@ -503,6 +503,73 @@ if _CFC_ENABLED:
 else:
     _CFC_TARGETS = []
 
+# --- Variability Analysis Layer (US-029) ---
+#
+# Across-trial variability per (subject x timelock x condition): signed
+# voltage epochs support the sample SD only, nonnegative TFR power supports
+# SD + Fano + CV. Mirrors the PSD/TFR/connectivity layers (ADR-007): condition
+# set shared with ERP (_ERP_QUERIES), cohort-tier group layout, and no n >= 2
+# gating — a mean of per-subject maps is defined at n=1 (no statistics in
+# this module). The power domain consumes the `tfr:` block independently of
+# `analysis.run_tfr`, so power-only variability needs no TFR artifacts.
+_VARIABILITY_ENABLED = config["analysis"]["run_variability"]
+_VARIABILITY_QUERIES = _ERP_QUERIES
+_VARIABILITY_DOMAINS = ("voltage", "power")
+_VARIABILITY_SETTINGS = (
+    (config.get("variability") or {}) if _VARIABILITY_ENABLED else {}
+)
+if _VARIABILITY_ENABLED:
+    _unknown_domains = sorted(set(_VARIABILITY_SETTINGS) - set(_VARIABILITY_DOMAINS))
+    if _unknown_domains:
+        raise ValueError(
+            f"config variability: unknown domain key(s) {_unknown_domains} — "
+            f"valid domains are {list(_VARIABILITY_DOMAINS)} (omit a domain to "
+            "disable it)"
+        )
+    if not _VARIABILITY_SETTINGS:
+        raise ValueError(
+            "analysis.run_variability is true but config variability: declares "
+            "no domain — add at least one of 'voltage' (measures: [sd]) or "
+            "'power' (measures: [sd, fano, cv])"
+        )
+    for _domain, _block in _VARIABILITY_SETTINGS.items():
+        _measures = _block.get("measures") if isinstance(_block, dict) else None
+        if not isinstance(_measures, list) or not _measures:
+            raise ValueError(
+                f"config variability.{_domain}.measures must be a non-empty "
+                "YAML list (voltage: [sd]; power: any of [sd, fano, cv]) — "
+                f"got {_block!r}"
+            )
+# TFR settings for the power domain only (independent of analysis.run_tfr).
+_VARIABILITY_TFR = (
+    config["tfr"] if "power" in _VARIABILITY_SETTINGS else None
+)
+
+# Per-subject variability maps (rule variability_subject): one ``.npz``
+# archive per (subject, timelock, condition) holding every configured domain
+# and measure, so the DAG has no per-measure wildcard. Cohort-tier group
+# layout (US-015): {cohort} directory between {timelock} and the files.
+_VARIABILITY_SUBJECT_OUT = (
+    f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_{{condition}}_desc-variability.npz"
+)
+_VARIABILITY_GROUP_OUT = (
+    f"{_OUT_DIR}/group_analysis/{{timelock}}/{{cohort}}/{{condition}}_desc-variability_ave.npz"
+)
+
+# `rule all` variability target expansion (empty when
+# analysis.run_variability is false); per-subject archives stay intermediates
+# feeding the group rule. No contrast or statistics targets (out of scope).
+_VARIABILITY_TARGETS = (
+    expand(
+        _VARIABILITY_GROUP_OUT,
+        timelock=_TIMELOCKS,
+        cohort=_COHORTS,
+        condition=list(_VARIABILITY_QUERIES),
+    )
+    if _VARIABILITY_ENABLED
+    else []
+)
+
 # --- Wildcard Constraints ---
 wildcard_constraints:
     subject = r"\d+",
@@ -591,6 +658,9 @@ rule all:
         # US-027: CFC descriptive cohort maps at any n, plus the subject-unit
         # contrast with full-map correction for cohorts with >= 2 subjects.
         _CFC_TARGETS,
+        # US-029: across-trial variability maps when enabled in config
+        # (analysis.run_variability; descriptive only — no inferential output).
+        _VARIABILITY_TARGETS,
 
 
 # --- Ingestion Layer (US-007 / US-009) ---
@@ -1432,3 +1502,72 @@ rule run_cfc:
         "logs/group/run_cfc_{timelock}_{cohort}_{contrast}.log",
     script:
         "scripts/run_cfc.py"
+
+
+# --- Variability Analysis Layer (US-029) ---
+# Across-trial variability per (subject, timelock, condition) -> cohort maps.
+# All math lives in p0ly_utils.analysis.variability (DoD: no algorithm logic
+# in rule scripts); no statistics, so single-subject cohorts run everything.
+rule variability_subject:
+    """Variability maps of one subject's (timelock, condition).
+
+    Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
+    (carrying trial metadata), selects the condition via its ``metadata.eval``
+    query from ``config.yaml group_aggregation.condition_splits`` (the
+    reserved ``all_trials`` condition applies no query), and lets
+    ``p0ly_utils.analysis.variability_epochs`` compute every configured
+    domain/measure (``config.yaml variability``) in one read: voltage ->
+    sample SD; power -> SD/Fano/CV from the TFR transform (``config.yaml
+    tfr``, independent of analysis.run_tfr). Fails loud on zero query matches
+    or fewer than two trials (US-024 philosophy). One ``.npz`` archive holds
+    ``{domain}__{measure}`` maps plus the power ``positive_mean`` mask,
+    ``{domain}__measures``, ``ch_names``, ``times``, power ``freqs``/
+    ``power__times`` and ``n_trials`` — no pickled objects.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        npz=_VARIABILITY_SUBJECT_OUT,
+    params:
+        condition="{condition}",
+        condition_query=lambda wildcards: _VARIABILITY_QUERIES[wildcards.condition],
+        variability=_VARIABILITY_SETTINGS,
+        tfr=_VARIABILITY_TFR,
+    log:
+        "logs/sub-{subject}/variability_subject_{timelock}_{condition}.log",
+    script:
+        "scripts/variability_subject.py"
+
+
+rule run_variability:
+    """Equal-subject-weight cohort variability maps (timelock, condition).
+
+    Consumes the cohort's per-subject ``desc-variability.npz`` archives (rule
+    variability_subject, US-015 cohort-restricted), rebuilds one
+    ``VariabilityResult`` per subject and domain, and writes
+    ``group_analysis/{timelock}/{cohort}/{condition}_desc-variability_ave.npz``
+    via ``p0ly_utils.analysis.group_variability``: SD averages every subject,
+    Fano/CV average only the subjects whose mean was positive at that cell
+    (equal weight, never pooled trials) and persist per-cell
+    ``{domain}__{measure}__n_contributing`` counts next to ``n_subjects`` —
+    the changing denominator stays visible. No reductions happen here.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_variability=lambda wildcards: expand(
+            _VARIABILITY_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+            condition=wildcards.condition,
+        ),
+    output:
+        ave=_VARIABILITY_GROUP_OUT,
+    params:
+        domains=lambda wildcards: list(_VARIABILITY_SETTINGS),
+    log:
+        "logs/group/run_variability_{timelock}_{cohort}_{condition}.log",
+    script:
+        "scripts/run_variability.py"
