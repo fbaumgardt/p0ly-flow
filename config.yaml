@@ -112,6 +112,22 @@ tfr:
   n_permutations: 1024
   seed: 20261020
 
+variability:
+  # US-029: across-trial variability for the variability_subject /
+  # run_variability rules (read when analysis.run_variability is true).
+  # A domain key enables that domain; omit it to disable it. At least one
+  # domain is required when the toggle is on. Voltage is signed and supports
+  # SD only — Fano/CV describe relative dispersion of nonnegative quantities
+  # and fail loud on voltage. The power domain reuses the tfr: block above
+  # (fmin/fmax/step/method/n_cycles/decim) independently of analysis.run_tfr.
+  # Sample estimators (ddof=1) need >= 2 trials per condition; SD comes from
+  # the sample variance, Fano = var/mean and CV = sd/mean are defined only
+  # where mean power > 0 (other cells stay NaN and are flagged per cell).
+  voltage:
+    measures: [sd]
+  power:
+    measures: [sd, fano, cv]
+
 connectivity:
   # US-013: spectral connectivity for the connectivity_subject /
   # connectivity_group_average / run_connectivity rules (read when
@@ -198,6 +214,7 @@ analysis:
   run_psd: false
   run_tfr: false
   run_connectivity: false
+  run_variability: false
   run_cfc: false
   run_regression: false
   run_decoding: false

@@ -21,6 +21,9 @@
 #   * analysis.run_tfr: true             -> exercises the US-012 TFR rules
 #                                          end-to-end (power + ITPC +
 #                                          difference map; no n >= 2 gating)
+#   * analysis.run_variability: true     -> exercises the US-029 variability
+#                                          rules end-to-end (voltage SD +
+#                                          power SD/Fano/CV; no n >= 2 gating)
 #   * analysis.run_regression: true      -> exercises the US-014 regression
 #                                          rules end-to-end (per-subject OLS
 #                                          beta maps + equal-weight cohort
@@ -170,13 +173,21 @@ cfc:
   seed: 20261020
   n_jobs: 1
 
+variability:
+  # US-029: both domains (see config.yaml for the full key documentation).
+  # The power domain reuses the tfr: block above, independently of
+  # analysis.run_tfr.
+  voltage:
+    measures: [sd]
+  power:
+    measures: [sd, fano, cv]
+
 analysis:
   run_erp: true
   run_psd: true
   run_tfr: true
   run_connectivity: true
-  run_cfc: false
   run_regression: true
   run_cfc: true
-  run_regression: false
+  run_variability: true
   run_decoding: false

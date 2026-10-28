@@ -27,6 +27,7 @@ Enable in `config.yaml` under `analysis:`; parameters live in the matching `conf
 | **Connectivity** | `connectivity_subject`, `connectivity_group_average`, `run_connectivity`, `connectivity_contrast` | Spectral connectivity (wPLI/coh/PLV) grand averages (plain or Fisher-z), band-averaged graph metrics, per-contrast difference graphs |
 | **Regression** | `regression_subject`, `run_regression` | Single-trial OLS beta maps per term (declared `regression.continuous` / `regression.categorical` metadata predictors) for voltage or TFR power, plus equal-subject-weight cohort means |
 | **CFC** | `cfc_subject`, `cfc_group_average`, `run_cfc` | Within-channel PAC + n:m phase-phase coupling maps with full surrogate nulls per subject, equal-subject descriptive cohort means, subject-unit condition contrasts with full-map corrected p-values |
+| **Variability** | `variability_subject`, `run_variability` | Across-trial maps per condition: voltage SD, power SD/Fano/CV; equal-subject-weight cohort archives with per-cell contributor counts |
 
 Statistics are defined per their group level: cluster-permutation and CFC contrast rules need the configured subject cohorts (CFC contrasts are omitted loudly below 2 subjects — exact sign flips give an n=2 p-value floor of 1/3); grand averages, difference graphs, PSD/TFR summaries, and CFC descriptive means are defined for any n.
 
@@ -37,6 +38,8 @@ CFC artifacts (compressed `.npz`, `config.yaml cfc` block):
 - `group_analysis/{timelock}/{cohort}/{contrast}_cfcperm.npz` — per method `__difference`, `__pvalues_corrected`, `__null_max`, `__valid_mask` (`evidence_level="cohort_subject_unit"`).
 
 Regression is explanatory within-subject OLS, not decoding or inference: one model per (subject, timelock) on all retained trials. Predictors are declared in `regression:` (`signal_domain: voltage | power`, `continuous: [...]`, `categorical: [...]` — at least one non-empty when `analysis.run_regression` is true); the power domain reuses the `tfr:` block for the transform even when `analysis.run_tfr` is false. There is no condition wildcard and no cohort-level statistic — cohort files are equal-subject-weight means of the per-subject beta maps.
+
+Variability (`analysis.run_variability`) is selected per domain in `config.yaml variability:` — omit a domain to disable it (`voltage: {measures: [sd]}` only, power only, or both). The power domain reuses the `tfr:` settings independently of `analysis.run_tfr`, so power variability needs no TFR artifacts. Ratios are `NaN` where mean power is zero; use the `power__positive_mean` mask (subject files) and the `*__n_contributing` counts (group files, next to `n_subjects`) rather than reading `NaN` as zero.
 
 ## Usage
 
