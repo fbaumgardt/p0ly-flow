@@ -24,6 +24,9 @@
 #   * analysis.run_variability: true     -> exercises the US-029 variability
 #                                          rules end-to-end (voltage SD +
 #                                          power SD/Fano/CV; no n >= 2 gating)
+#   * analysis.run_decoding: true        -> exercises the US-030 decoding rules
+#                                          end-to-end (target `Size`, 3 classes,
+#                                          n_splits: 3 to fit the 30-trial
 #   * analysis.run_regression: true      -> exercises the US-014 regression
 #                                          rules end-to-end (per-subject OLS
 #                                          beta maps + equal-weight cohort
@@ -182,6 +185,23 @@ variability:
   power:
     measures: [sd, fano, cv]
 
+decoding:
+  # US-030: within-subject decoding of a categorical metadata column (see
+  # config.yaml for the full key documentation). `Size` (3 classes) and
+  # n_splits: 3 fit the 30-trial synthetic fixture; analysis.run_decoding is
+  # true so the smoke run exercises the decoding rules end-to-end.
+  targets: [Size]
+  mode: time_resolved
+  estimator: logistic_regression
+  estimator_params:
+    C: 1.0
+    max_iter: 1000
+    class_weight: null
+  n_splits: 3
+  scoring: accuracy
+  seed: 20261020
+  n_jobs: 1
+
 analysis:
   run_erp: true
   run_psd: true
@@ -190,4 +210,4 @@ analysis:
   run_regression: true
   run_cfc: true
   run_variability: true
-  run_decoding: false
+  run_decoding: true
