@@ -1263,6 +1263,51 @@ rule regression_subject:
     n_times)``, ``terms``, ``ch_names``, ``times``, ``freqs`` (power only),
     ``domain``, ``reference_levels_json``, ``n_input``, ``n_used``,
     ``n_excluded``, ``excluded_rows`` (SCHEMA §regression).
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
+    output:
+        npz=_REG_SUBJECT_OUT,
+    params:
+        regression=_REG_SETTINGS,
+        tfr=_REG_TFR_SETTINGS,
+    log:
+        "logs/sub-{subject}/regression_subject_{timelock}.log",
+    script:
+        "scripts/regression_subject.py"
+
+
+rule run_regression:
+    """Equal-subject-weight cohort mean of the per-subject beta maps.
+
+    Inputs are the cohort's per-subject ``desc-regression.npz`` archives
+    (rule regression_subject, US-015 cohort membership) — never the original
+    epochs, so the cohort value cannot become a pooled-trial estimate.
+    ``p0ly_utils.analysis.group_regression`` averages the subject maps with
+    equal subject weight and guards domain, term order, reference levels,
+    channel set and response grid. Output:
+    ``group_analysis/{timelock}/{cohort}/desc-regression_ave.npz`` (same
+    payload minus the exclusion bookkeeping, plus ``n_subjects`` and
+    ``n_trials_used_total``). No inferential output lives here.
+    """
+    conda:
+        "envs/snakemake.yaml"
+    input:
+        subject_npzs=lambda wildcards: expand(
+            _REG_SUBJECT_OUT,
+            subject=_COHORT_SUBJECTS[wildcards.cohort],
+            timelock=wildcards.timelock,
+        ),
+    output:
+        ave=_REG_GROUP_OUT,
+    log:
+        "logs/group/run_regression_{timelock}_{cohort}.log",
+    script:
+        "scripts/run_regression.py"
+
+
 # --- Cross-Frequency Coupling Rules (US-027) ---
 # ADR-007 three-rule topology: per-subject maps (with their full surrogate
 # nulls) feed a descriptive cohort mean and the subject-unit contrast. All
@@ -1296,28 +1341,6 @@ rule cfc_subject:
     input:
         epochs=f"{_OUT_DIR}/sub-{{subject}}/sub-{{subject}}_{{timelock}}_desc-epo.fif.gz",
     output:
-        npz=_REG_SUBJECT_OUT,
-    params:
-        regression=_REG_SETTINGS,
-        tfr=_REG_TFR_SETTINGS,
-    log:
-        "logs/sub-{subject}/regression_subject_{timelock}.log",
-    script:
-        "scripts/regression_subject.py"
-
-
-rule run_regression:
-    """Equal-subject-weight cohort mean of the per-subject beta maps.
-
-    Inputs are the cohort's per-subject ``desc-regression.npz`` archives
-    (rule regression_subject, US-015 cohort membership) — never the original
-    epochs, so the cohort value cannot become a pooled-trial estimate.
-    ``p0ly_utils.analysis.group_regression`` averages the subject maps with
-    equal subject weight and guards domain, term order, reference levels,
-    channel set and response grid. Output:
-    ``group_analysis/{timelock}/{cohort}/desc-regression_ave.npz`` (same
-    payload minus the exclusion bookkeeping, plus ``n_subjects`` and
-    ``n_trials_used_total``). No inferential output lives here.
         cfc=_CFC_SUBJECT_OUT,
     params:
         subject="{subject}",
@@ -1344,17 +1367,6 @@ rule cfc_group_average:
     conda:
         "envs/snakemake.yaml"
     input:
-        subject_npzs=lambda wildcards: expand(
-            _REG_SUBJECT_OUT,
-            subject=_COHORT_SUBJECTS[wildcards.cohort],
-            timelock=wildcards.timelock,
-        ),
-    output:
-        ave=_REG_GROUP_OUT,
-    log:
-        "logs/group/run_regression_{timelock}_{cohort}.log",
-    script:
-        "scripts/run_regression.py"
         subject_maps=lambda wildcards: expand(
             _CFC_SUBJECT_OUT,
             subject=_COHORT_SUBJECTS[wildcards.cohort],

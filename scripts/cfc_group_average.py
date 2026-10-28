@@ -11,7 +11,9 @@ Only observed maps enter cohort math — subject nulls and p-values stay in the
 per-subject archives; they are subject-level descriptive evidence and never a
 cohort claim. The output therefore carries **no averaged p-values**
 (``evidence_level="cohort_descriptive"``) and is valid at any n >= 1.
-Off-ratio PPC cells stay NaN.
+Off-ratio PPC cells stay NaN. Shared axes (``ch_names``, ``phase_freqs``,
+``amp_freqs``, ``methods``) and the ``ratios`` echo are carried through from
+the subject archives; a ratio mismatch between subjects fails loud.
 
 Note: no `from __future__ import annotations` — Snakemake's `script:` directive
 prepends a preamble before this file's body, and __future__ imports must be the
@@ -22,13 +24,13 @@ import numpy as np
 from p0ly_utils.analysis import CFCMap, group_cfc
 
 
-def _read(path: str) -> dict[str, CFCMap]:
-    """Rebuild observed CFCMaps from one subject ``desc-cfc.npz`` archive."""
+def _read(path: str) -> tuple[dict[str, CFCMap], np.ndarray]:
+    """Rebuild observed CFCMaps (plus the PPC ratio echo) from one archive."""
     with np.load(path) as archive:
         ch_names = tuple(str(name) for name in archive["ch_names"])
         phase_freqs = np.asarray(archive["phase_freqs"])
         amp_freqs = np.asarray(archive["amp_freqs"])
-        return {
+        maps = {
             str(key): CFCMap(
                 values=np.asarray(archive[f"{key}__observed"]),
                 ch_names=ch_names,
@@ -40,9 +42,17 @@ def _read(path: str) -> dict[str, CFCMap]:
             )
             for key in (str(name) for name in archive["methods"])
         }
+        return maps, np.asarray(archive["ratios"])
 
 
-subject_maps = [_read(str(path)) for path in snakemake.input.subject_maps]  # type: ignore[name-defined]
+read = [_read(str(path)) for path in snakemake.input.subject_maps]  # type: ignore[name-defined]
+subject_maps = [maps for maps, _ in read]
+ratios = read[0][1]
+if any(not np.array_equal(other, ratios) for _, other in read[1:]):
+    raise RuntimeError(
+        "cfc group average inputs were computed with different PPC ratios — "
+        "recompute every subject with one config"
+    )
 average = group_cfc(subject_maps)
 reference = average.averages[next(iter(average.averages))]
 payload: dict[str, object] = {
@@ -50,6 +60,7 @@ payload: dict[str, object] = {
     "phase_freqs": reference.phase_freqs,
     "amp_freqs": reference.amp_freqs,
     "methods": np.array(list(average.averages)),
+    "ratios": ratios,
     "n_subjects": np.array(average.n_subjects),
     "evidence_level": np.array(average.evidence_level),
     "timelock": np.array(snakemake.wildcards.timelock),  # type: ignore[name-defined]

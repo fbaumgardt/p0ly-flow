@@ -35,16 +35,24 @@ p = snakemake.params  # type: ignore[name-defined]
 settings = p.stats
 
 
-def _read(paths: list[str]) -> tuple[list[dict[str, CFCMap]], list[str]]:
-    """Rebuild one arm's observed CFCMaps plus its ordered subject IDs."""
+def _read(paths: list[str]) -> tuple[list[dict[str, CFCMap]], list[str], np.ndarray]:
+    """Rebuild one arm's observed CFCMaps, ordered subject IDs and ratio echo."""
     arm: list[dict[str, CFCMap]] = []
     subject_ids: list[str] = []
+    ratios: np.ndarray | None = None
     for path in paths:
         with np.load(path) as archive:
             ch_names = tuple(str(name) for name in archive["ch_names"])
             phase_freqs = np.asarray(archive["phase_freqs"])
             amp_freqs = np.asarray(archive["amp_freqs"])
             subject_ids.append(str(archive["subject"]))
+            this_ratios = np.asarray(archive["ratios"])
+            if ratios is not None and not np.array_equal(this_ratios, ratios):
+                raise RuntimeError(
+                    f"{path} was computed with different PPC ratios {this_ratios} "
+                    f"than {ratios} — recompute the cohort with one config"
+                )
+            ratios = this_ratios
             arm.append(
                 {
                     str(key): CFCMap(
@@ -59,11 +67,15 @@ def _read(paths: list[str]) -> tuple[list[dict[str, CFCMap]], list[str]]:
                     for key in (str(name) for name in archive["methods"])
                 }
             )
-    return arm, subject_ids
+    return arm, subject_ids, ratios if ratios is not None else np.empty((0, 2), dtype=int)
 
 
-first, first_ids = _read([str(path) for path in snakemake.input.maps_first])  # type: ignore[name-defined]
-second, second_ids = _read([str(path) for path in snakemake.input.maps_second])  # type: ignore[name-defined]
+first, first_ids, ratios = _read([str(path) for path in snakemake.input.maps_first])  # type: ignore[name-defined]
+second, second_ids, second_ratios = _read([str(path) for path in snakemake.input.maps_second])  # type: ignore[name-defined]
+if not np.array_equal(second_ratios, ratios):
+    raise RuntimeError(
+        f"contrast arms were computed with different PPC ratios — {second_ratios} vs {ratios}"
+    )
 if first_ids != second_ids:
     raise RuntimeError(
         f"cfc contrast arms must pair the same subjects — {first_ids} vs {second_ids}"
@@ -82,6 +94,7 @@ payload: dict[str, object] = {
     "phase_freqs": reference.phase_freqs,
     "amp_freqs": reference.amp_freqs,
     "methods": np.array(list(results)),
+    "ratios": ratios,
     "conditions": np.array([str(name) for name in p.conditions]),
     "n_subjects": np.array(results[next(iter(results))].n_subjects),
     "n_permutations": np.array(results[next(iter(results))].n_permutations),
