@@ -514,15 +514,32 @@ else:
 # `analysis.run_tfr`, so power-only variability needs no TFR artifacts.
 _VARIABILITY_ENABLED = config["analysis"]["run_variability"]
 _VARIABILITY_QUERIES = _ERP_QUERIES
+_VARIABILITY_DOMAINS = ("voltage", "power")
 _VARIABILITY_SETTINGS = (
     (config.get("variability") or {}) if _VARIABILITY_ENABLED else {}
 )
-if _VARIABILITY_ENABLED and not ({"voltage", "power"} & set(_VARIABILITY_SETTINGS)):
-    raise ValueError(
-        "analysis.run_variability is true but config variability: declares no "
-        "domain — add at least one of 'voltage' (measures: [sd]) or 'power' "
-        "(measures: [sd, fano, cv])"
-    )
+if _VARIABILITY_ENABLED:
+    _unknown_domains = sorted(set(_VARIABILITY_SETTINGS) - set(_VARIABILITY_DOMAINS))
+    if _unknown_domains:
+        raise ValueError(
+            f"config variability: unknown domain key(s) {_unknown_domains} — "
+            f"valid domains are {list(_VARIABILITY_DOMAINS)} (omit a domain to "
+            "disable it)"
+        )
+    if not _VARIABILITY_SETTINGS:
+        raise ValueError(
+            "analysis.run_variability is true but config variability: declares "
+            "no domain — add at least one of 'voltage' (measures: [sd]) or "
+            "'power' (measures: [sd, fano, cv])"
+        )
+    for _domain, _block in _VARIABILITY_SETTINGS.items():
+        _measures = _block.get("measures") if isinstance(_block, dict) else None
+        if not isinstance(_measures, list) or not _measures:
+            raise ValueError(
+                f"config variability.{_domain}.measures must be a non-empty "
+                "YAML list (voltage: [sd]; power: any of [sd, fano, cv]) — "
+                f"got {_block!r}"
+            )
 # TFR settings for the power domain only (independent of analysis.run_tfr).
 _VARIABILITY_TFR = (
     config["tfr"] if "power" in _VARIABILITY_SETTINGS else None
