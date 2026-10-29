@@ -2,8 +2,8 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-condition
 ``desc-cfc.npz`` archive (rule cfc_subject — Snakemake expands the subject set,
-no Python subject loop here), rebuilds ``p0ly_utils.analysis.CFCMap`` from the
-**observed** arrays only, and calls ``p0ly_utils.analysis.group_cfc``
+no Python subject loop here), rebuilds ``p0ly_eeg.analysis.CFCMap`` from the
+**observed** arrays only, and calls ``p0ly_eeg.analysis.group_cfc``
 (equal-subject-weight mean with channel-set, method, grid and valid-mask
 guards).
 
@@ -21,7 +21,7 @@ first statement (flagged during US-007).
 """
 
 import numpy as np
-from p0ly_utils.analysis import CFCMap, group_cfc
+from p0ly_eeg.analysis import CFCMap, group_cfc
 
 
 def _read(path: str) -> tuple[dict[str, CFCMap], np.ndarray]:

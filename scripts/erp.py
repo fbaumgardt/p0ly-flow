@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the per-subject condition evokeds
 for the contrast's two arms (rule inputs, expanded by Snakemake), forwards them
-to ``p0ly_utils.analysis.group_erp`` with the statistics settings from
+to ``p0ly_eeg.analysis.group_erp`` with the statistics settings from
 ``config.yaml erp`` (``n_permutations``, ``seed``), and writes the requested
 contrast's files. All math — per-subject difference waves, EEG-only picking,
 channel adjacency, threshold selection, the permutation test itself — lives in
@@ -29,7 +29,7 @@ first statement (flagged during US-007).
 import mne
 import numpy as np
 import pandas as pd
-from p0ly_utils.analysis import group_erp
+from p0ly_eeg.analysis import group_erp
 
 p = snakemake.params
 cond_first, cond_second = p.conditions

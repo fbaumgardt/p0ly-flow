@@ -3,8 +3,8 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-condition
 ``desc-variability.npz`` archive (rule variability_subject — Snakemake expands
 the subject set, no Python subject loop over subjects here), rebuilds one
-``p0ly_utils.analysis.VariabilityResult`` per (subject, domain) and calls
-``p0ly_utils.analysis.group_variability`` per domain — SD averages every
+``p0ly_eeg.analysis.VariabilityResult`` per (subject, domain) and calls
+``p0ly_eeg.analysis.group_variability`` per domain — SD averages every
 subject, Fano/CV average only the subjects whose mean power was positive at
 that cell (equal weight, never pooled trials). No reduction happens here.
 
@@ -21,7 +21,7 @@ first statement (flagged during US-007).
 """
 
 import numpy as np
-from p0ly_utils.analysis import VariabilityResult, group_variability
+from p0ly_eeg.analysis import VariabilityResult, group_variability
 
 p = snakemake.params  # type: ignore[name-defined]
 domains = list(p.domains)

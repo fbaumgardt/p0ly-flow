@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the two group-average two-entry
 TFR files (rule tfr_group_average — two reads, not 2 x N subject re-reads)
-and calls ``p0ly_utils.analysis.tfr_difference`` for each entry, writing
+and calls ``p0ly_eeg.analysis.tfr_difference`` for each entry, writing
 ``group_analysis/{timelock}/{condA}-vs-{condB}_desc-tfrdiff.h5`` —
 positional convention: entry [0] = power difference, entry [1] = ITPC
 difference. No statistical test lives here (US-012 spike 3: difference maps
@@ -14,7 +14,7 @@ first statement (flagged during US-007).
 """
 
 from mne.time_frequency import read_tfrs, write_tfrs
-from p0ly_utils.analysis import tfr_difference
+from p0ly_eeg.analysis import tfr_difference
 
 cond_first_entries = read_tfrs(str(snakemake.input.cond_first))  # type: ignore[name-defined]
 cond_second_entries = read_tfrs(str(snakemake.input.cond_second))  # type: ignore[name-defined]

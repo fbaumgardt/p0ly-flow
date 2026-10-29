@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.spectral_connectivity`` apply the
+metadata) and lets ``p0ly_eeg.analysis.spectral_connectivity`` apply the
 condition's ``metadata.eval`` query (from ``config.yaml
 group_aggregation.condition_splits``; the reserved ``all_trials`` condition
 passes ``None``) before one ``mne_connectivity`` call computes every
@@ -19,7 +19,7 @@ first statement (flagged during US-007).
 
 import mne
 import numpy as np
-from p0ly_utils.analysis import spectral_connectivity
+from p0ly_eeg.analysis import spectral_connectivity
 
 p = snakemake.params  # type: ignore[name-defined]
 settings = p.connectivity

@@ -5,8 +5,8 @@ Pure I/O shim per p0ly-flow/AGENTS.md. Inputs are the cohort's per-subject
 subject-unit test needs the per-subject maps, not the descriptive averages.
 The script verifies that both arms list the **same subject IDs in the same
 order** (a silent reordering would pair the wrong subjects), rebuilds observed
-``p0ly_utils.analysis.CFCMap`` objects only, and calls
-``p0ly_utils.analysis.cfc_condition_contrast``.
+``p0ly_eeg.analysis.CFCMap`` objects only, and calls
+``p0ly_eeg.analysis.cfc_condition_contrast``.
 
 Subject nulls/p-values are never read: the library signature takes observed
 maps only, so trial-level or surrogate p-values cannot enter the cohort
@@ -29,7 +29,7 @@ first statement (flagged during US-007).
 """
 
 import numpy as np
-from p0ly_utils.analysis import CFCMap, cfc_condition_contrast
+from p0ly_eeg.analysis import CFCMap, cfc_condition_contrast
 
 p = snakemake.params  # type: ignore[name-defined]
 settings = p.stats

@@ -3,7 +3,7 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the US-008 cleaned raw and the
 US-016 metadata TSV, loads the experiment spec from the path given by
 ``config['metadata']['experiment_spec']``, and calls
-``p0ly_utils.epoching.epoch_with_metadata`` to cut ``mne.Epochs`` for the
+``p0ly_eeg.epoching.epoch_with_metadata`` to cut ``mne.Epochs`` for the
 requested timelock and reconcile the metadata against them. The aligned epochs
 are saved to ``sub-{subject}_{timelock}_desc-epo.fif.gz`` (SCHEMA §6) and the
 mismatch log to ``sub-{subject}_{timelock}_excluded_trials.csv``. No
@@ -16,8 +16,8 @@ first statement (flagged #2, discovered during US-007).
 
 import mne
 import pandas as pd
-from p0ly_utils.epoching import epoch_with_metadata, validate_intervals
-from p0ly_utils.metadata import ExperimentSpec
+from p0ly_eeg.epoching import epoch_with_metadata, validate_intervals
+from p0ly_eeg.metadata import ExperimentSpec
 
 p = snakemake.params  # type: ignore[name-defined]
 

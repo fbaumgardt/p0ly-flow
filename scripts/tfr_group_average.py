@@ -3,7 +3,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-condition
 two-entry TFR file listed by the rule (Snakemake expands the subject set —
-no Python subject loop here) and calls ``p0ly_utils.analysis.group_tfr``
+no Python subject loop here) and calls ``p0ly_eeg.analysis.group_tfr``
 independently for the power and ITPC entries (equal-weight cross-subject
 mean with frequency-grid + channel-set guards), writing
 ``group_analysis/{timelock}/{condition}_desc-tfr_ave.h5`` — positional
@@ -15,7 +15,7 @@ first statement (flagged during US-007).
 """
 
 from mne.time_frequency import read_tfrs, write_tfrs
-from p0ly_utils.analysis import group_tfr
+from p0ly_eeg.analysis import group_tfr
 
 
 def _read_entries(path: str) -> tuple[object, object]:

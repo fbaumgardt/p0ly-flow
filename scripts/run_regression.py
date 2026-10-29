@@ -3,8 +3,8 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-timelock
 ``desc-regression.npz`` archive (rule regression_subject — Snakemake expands
 the cohort's subject set, no Python subject loop here), rebuilds
-``p0ly_utils.analysis.RegressionResult`` from it without pickle, and calls
-``p0ly_utils.analysis.group_regression`` — the equal-subject-weight
+``p0ly_eeg.analysis.RegressionResult`` from it without pickle, and calls
+``p0ly_eeg.analysis.group_regression`` — the equal-subject-weight
 arithmetic mean with domain / term-order / reference-level / channel /
 response-grid guards. Original epochs are never read here, so a cohort value
 cannot silently become a pooled-trial estimate.
@@ -23,7 +23,7 @@ first statement (flagged during US-007).
 import json
 
 import numpy as np
-from p0ly_utils.analysis import RegressionResult, group_regression
+from p0ly_eeg.analysis import RegressionResult, group_regression
 
 
 def _read(path: str) -> RegressionResult:

@@ -2,8 +2,8 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the two grand-average
 ``desc-conn_ave.npz`` archives of a contrast pair (rule
-connectivity_group_average), rebuilds ``p0ly_utils.analysis.ConnectivityMatrices``
-from each, and calls ``p0ly_utils.analysis.difference_connectivity`` — the
+connectivity_group_average), rebuilds ``p0ly_eeg.analysis.ConnectivityMatrices``
+from each, and calls ``p0ly_eeg.analysis.difference_connectivity`` — the
 plain ``first - second`` condition difference (the wildcard order in the
 contrast name is the sign convention — condition *first* minus *second*).
 The difference adjacency is band-averaged (``config.yaml
@@ -26,7 +26,7 @@ first statement (flagged during US-007).
 
 import numpy as np
 import pandas as pd
-from p0ly_utils.analysis import (
+from p0ly_eeg.analysis import (
     ConnectivityMatrices,
     band_average,
     difference_connectivity,

@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.variability_epochs`` apply the
+metadata) and lets ``p0ly_eeg.analysis.variability_epochs`` apply the
 condition's ``metadata.eval`` query (from ``config.yaml
 group_aggregation.condition_splits``; the reserved ``all_trials`` condition
 passes ``None``) before reducing over the trial axis. Every configured domain
@@ -23,7 +23,7 @@ first statement (flagged during US-007).
 
 import mne
 import numpy as np
-from p0ly_utils.analysis import variability_epochs
+from p0ly_eeg.analysis import variability_epochs
 
 p = snakemake.params  # type: ignore[name-defined]
 settings = p.variability

@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and calls ``p0ly_utils.analysis.regression_epochs`` with the
+metadata) and calls ``p0ly_eeg.analysis.regression_epochs`` with the
 ``config.yaml regression:`` predictor declaration — ``signal_domain``
 (``voltage`` | ``power``), ``continuous`` numeric columns and ``categorical``
 reference-coded columns. Design-matrix construction, complete-case exclusion,
@@ -28,7 +28,7 @@ import json
 
 import mne
 import numpy as np
-from p0ly_utils.analysis import regression_epochs
+from p0ly_eeg.analysis import regression_epochs
 
 p = snakemake.params  # type: ignore[name-defined]
 settings = p.regression

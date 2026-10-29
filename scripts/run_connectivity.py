@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the grand-average
 ``desc-conn_ave.npz`` (rule connectivity_group_average — one read, not N
-subject re-reads), then calls ``p0ly_utils.analysis`` helpers —
+subject re-reads), then calls ``p0ly_eeg.analysis`` helpers —
 ``band_average`` (inclusive ``(fmin, fmax)`` windows from
 ``config.yaml connectivity.bands``) and ``graph_metrics`` (thresholded
 undirected weighted graph via networkx: weighted clustering, characteristic
@@ -21,7 +21,7 @@ first statement (flagged during US-007).
 
 import numpy as np
 import pandas as pd
-from p0ly_utils.analysis import band_average, graph_metrics
+from p0ly_eeg.analysis import band_average, graph_metrics
 
 p = snakemake.params  # type: ignore[name-defined]
 bands = {name: (float(lo), float(hi)) for name, (lo, hi) in p.bands.items()}

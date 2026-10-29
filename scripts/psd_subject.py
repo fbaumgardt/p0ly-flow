@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.psd_by_condition`` apply the
+metadata) and lets ``p0ly_eeg.analysis.psd_by_condition`` apply the
 condition's ``metadata.eval`` query (from ``config.yaml
 group_aggregation.condition_splits``; the reserved ``all_trials`` condition
 passes ``None``) before computing the Welch spectrum with ``config.yaml psd``
@@ -16,7 +16,7 @@ first statement (flagged during US-007).
 """
 
 import mne
-from p0ly_utils.analysis import psd_by_condition
+from p0ly_eeg.analysis import psd_by_condition
 
 p = snakemake.params
 psd_settings = p.psd

@@ -2,8 +2,8 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the per-subject ``desc-decode.npz``
 archives listed by the rule (Snakemake expands the cohort subject set — no
-Python subject loop here), reconstructs ``p0ly_utils.analysis.DecodingResult``
-objects, and lets ``p0ly_utils.analysis.group_decoding`` validate the shared
+Python subject loop here), reconstructs ``p0ly_eeg.analysis.DecodingResult``
+objects, and lets ``p0ly_eeg.analysis.group_decoding`` validate the shared
 configuration (target, mode, scoring, class order, chance level, time grid,
 score shape) and average the subject-level scores with equal subject weights.
 Trials are never pooled across subjects and folds are not treated as subjects;
@@ -16,7 +16,7 @@ first statement (flagged during US-007).
 """
 
 import numpy as np
-from p0ly_utils.analysis import DecodingResult, group_decoding
+from p0ly_eeg.analysis import DecodingResult, group_decoding
 
 
 def _read(path: str) -> DecodingResult:

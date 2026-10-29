@@ -3,7 +3,7 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the cleaned raw, extracts the
 Psychtoolbox event-marker frame, loads the experiment spec from the path given
 by ``config['metadata']['experiment_spec']``, and calls
-``p0ly_utils.metadata.parse_metadata`` to build the by-trial DataFrame
+``p0ly_eeg.metadata.parse_metadata`` to build the by-trial DataFrame
 (``Block`` / ``Trial`` / ``Onset`` + spec-defined extended columns). The result
 is written as a per-subject TSV. No extraction or parsing logic lives here —
 algorithms belong in p0ly-eeg.
@@ -17,7 +17,7 @@ first statement (flagged #2, discovered during US-007).
 """
 
 import mne
-from p0ly_utils.metadata import ExperimentSpec, events_from_raw, parse_metadata
+from p0ly_eeg.metadata import ExperimentSpec, events_from_raw, parse_metadata
 
 p = snakemake.params  # type: ignore[name-defined]
 

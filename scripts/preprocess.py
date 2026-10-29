@@ -1,7 +1,7 @@
 """Continuous-data preprocessing wrapper (US-008).
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads input raw, maps the
-``preprocessing`` config block to ``p0ly_utils.preprocessing.preprocess_raw``
+``preprocessing`` config block to ``p0ly_eeg.preprocessing.preprocess_raw``
 keyword arguments, saves the cleaned raw + ``bad_channels.json`` sidecar and,
 when ICA ran, the fitted ICA object to ``sub-{subject}_desc-ica.fif.gz``. No
 algorithm logic, no hardcoded paths, no config-key knowledge inside the library
@@ -18,7 +18,7 @@ first statement.
 import json
 
 import mne
-from p0ly_utils import preprocessing as pp
+from p0ly_eeg import preprocessing as pp
 
 p = snakemake.params.pp  # type: ignore[name-defined]
 

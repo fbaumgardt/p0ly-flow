@@ -20,10 +20,10 @@ _META = config["metadata"]
 
 # The timelock set is derived from the experiment spec itself
 # (``ExperimentSpec.timelocks`` keys) so no timelock literals live in the
-# Snakefile. ``p0ly_utils`` is already a dependency, so the spec is loaded at
+# Snakefile. ``p0ly_eeg`` is already a dependency, so the spec is loaded at
 # DAG-parse time.
-from p0ly_utils.analysis import freq_grid
-from p0ly_utils.metadata import ExperimentSpec
+from p0ly_eeg.analysis import freq_grid
+from p0ly_eeg.metadata import ExperimentSpec
 
 _TIMELOCKS = list(ExperimentSpec.from_yaml(_META["experiment_spec"]).timelocks.keys())
 
@@ -576,7 +576,7 @@ _VARIABILITY_TARGETS = (
 # per-(subject × timelock × target) time-resolved or temporal-generalization
 # scores, then an equal-subject-weight cohort mean. No condition splits, no
 # cross-subject pooling, no statistics — the library owns estimator/CV/scoring
-# (p0ly_utils.analysis.decode_epochs / group_decoding).
+# (p0ly_eeg.analysis.decode_epochs / group_decoding).
 import re
 
 _DECODING_ENABLED = config["analysis"]["run_decoding"]
@@ -726,7 +726,7 @@ rule all:
 # --- Ingestion Layer (US-007 / US-009) ---
 # Manifest-driven, one rule per subject: the manifest's rows for the subject
 # are resolved at DAG time (input) and merged at runtime by the script, which
-# calls `p0ly_utils.merge_recordings` (BAD_break boundaries, channel/sfreq
+# calls `p0ly_eeg.merge_recordings` (BAD_break boundaries, channel/sfreq
 # validation) over the per-segment Raw objects loaded via `load_raw`. No
 # per-segment intermediate FIFs are written (first US-009 step); the two-rule
 # split (per-segment ingest + merge) is a future scaling lever for per-segment
@@ -737,8 +737,8 @@ rule raw_ingestion:
     For each manifest row ``(segment, source)`` the script builds the per-format
     ``source`` (BV: concrete ``.vhdr`` path; BIDS: pipeline-constructed
     ``BIDSPath`` — single-segment BIDS only in this first step) and loads it via
-    ``p0ly_utils.io.load_raw``, then concatenates the segments with
-    ``p0ly_utils.merge.merge_recordings``. Channel types + montage are fixed on
+    ``p0ly_eeg.io.load_raw``, then concatenates the segments with
+    ``p0ly_eeg.merge.merge_recordings``. Channel types + montage are fixed on
     each segment by ``load_raw`` and preserved by ``mne.concatenate_raws``; a
     single-segment subject passes through ``merge_recordings`` unchanged.
     Output: ``sub-{subject}_desc-raw.fif.gz`` consumed by ``preprocess``.
@@ -772,7 +772,7 @@ rule preprocess:
     parameter recomputes the whole subject without exploding intermediate FIF
     checkpoints. All tunables arrive from config['preprocessing'] via
     snakemake.params; the rule body holds no math — algorithms live in
-    p0ly_utils.preprocessing.
+    p0ly_eeg.preprocessing.
 
     Outputs:
       - sub-{subject}_desc-clean-raw.fif.gz : cleaned continuous raw carrying
@@ -804,7 +804,7 @@ rule inject_metadata:
 
     Reads the cleaned continuous raw (US-008 output) — which carries the
     Psychtoolbox Stim Annotations and recomputes whenever preprocessing changes
-    — extracts the event frame, and runs ``p0ly_utils.metadata.parse_metadata``
+    — extracts the event frame, and runs ``p0ly_eeg.metadata.parse_metadata``
     against the experiment spec referenced by ``config.yaml``
     ``metadata.experiment_spec``. Writes a per-subject TSV (SCHEMA §6:
     ``sub-{subject}_metadata.tsv``).
@@ -839,7 +839,7 @@ rule epoch:
     ``config.yaml epoching.intervals``, ADR-006) and the shared ``baseline``
     (``config.yaml epoching.baseline``), then aligns the US-016 by-trial
     metadata TSV to those epochs via
-    ``p0ly_utils.epoching.epoch_with_metadata``. Mismatches (extra epochs,
+    ``p0ly_eeg.epoching.epoch_with_metadata``. Mismatches (extra epochs,
     missing epochs, bad-interval drops) are written to the per-timelock
     ``excluded_trials.csv`` sidecar (SCHEMA §6) rather than silently dropped.
     The ``{timelock}`` wildcard propagates to downstream cohort/condition /
@@ -882,7 +882,7 @@ rule epoch:
 # --- ERP Analysis Layer (US-010) ---
 # Per-subject condition averages (erp_subject) feed the two group rules;
 # the split keeps per-subject QC artifacts independent of group
-# recomputation. All math lives in p0ly_utils.analysis (DoD: no algorithm
+# recomputation. All math lives in p0ly_eeg.analysis (DoD: no algorithm
 # logic in rule scripts); cluster permutation contrasts are omitted from
 # the DAG at parse time for cohorts with < 2 subjects.
 rule erp_subject:
@@ -892,7 +892,7 @@ rule erp_subject:
     (carrying trial metadata) and selects the condition via its
     ``metadata.eval`` query from ``config.yaml
     group_aggregation.condition_splits``; the reserved ``all_trials``
-    condition applies no query. ``p0ly_utils.analysis.average_epochs``
+    condition applies no query. ``p0ly_eeg.analysis.average_epochs``
     performs selection + averaging and fails loud on zero epochs or zero
     query matches (US-024 philosophy). The output keeps every channel
     (per-subject QC artifact).
@@ -917,7 +917,7 @@ rule erp_group_average:
     Consumes the per-subject ``desc-ave`` files (rule erp_subject) of the
     cohort's members only (US-015: membership from ``participants.tsv``) and
     writes ``group_analysis/{timelock}/{cohort}/{condition}_desc-ave.fif.gz``
-    (cohort-tier layout, PRD §6). ``p0ly_utils.analysis.grand_average``
+    (cohort-tier layout, PRD §6). ``p0ly_eeg.analysis.grand_average``
     equal-weights every subject regardless of trial counts.
     """
     conda:
@@ -942,7 +942,7 @@ rule run_erp:
 
     Inputs are the cohort's per-subject condition evokeds (rule erp_subject,
     US-015 cohort-restricted) for both contrast arms.
-    ``p0ly_utils.analysis.group_erp`` builds the per-subject
+    ``p0ly_eeg.analysis.group_erp`` builds the per-subject
     difference waves (cond_first - cond_second), picks EEG-only channels so
     they align with the montage-derived channel adjacency, and runs the
     one-sample cluster permutation test against zero with ``config.yaml erp``
@@ -990,7 +990,7 @@ rule run_erp:
 # Welch spectra per (subject, timelock, condition) feed two group rules; the
 # split mirrors the ERP layer (ADR-007): per-subject QC artifacts, group
 # averages, and per-condition parameterization. All math lives in
-# p0ly_utils.analysis (DoD: no algorithm logic in rule scripts); single-subject
+# p0ly_eeg.analysis (DoD: no algorithm logic in rule scripts); single-subject
 # cohorts run everything (no statistics in this module).
 rule psd_subject:
     """Welch spectrum of one subject's epochs for one (timelock, condition).
@@ -1000,7 +1000,7 @@ rule psd_subject:
     query from ``config.yaml group_aggregation.condition_splits`` (the
     reserved ``all_trials`` condition applies no query), and computes the
     Welch spectrum with ``config.yaml psd`` settings.
-    ``p0ly_utils.analysis.psd_by_condition`` fails loud on zero query matches
+    ``p0ly_eeg.analysis.psd_by_condition`` fails loud on zero query matches
     (US-024 philosophy). The spectrum keeps every channel (per-subject QC
     artifact) and is written as MNE Spectrum HDF5 (h5io — Spectrum.save's
     native container; not FIF).
@@ -1027,7 +1027,7 @@ rule psd_group_average:
     Consumes the cohort's per-subject ``desc-psd`` files (rule psd_subject,
     US-015 cohort-restricted) and writes
     ``group_analysis/{timelock}/{cohort}/{condition}_desc-psd_ave.h5`` (MNE
-    Spectrum HDF5) via ``p0ly_utils.analysis.group_psd`` (frequency-grid +
+    Spectrum HDF5) via ``p0ly_eeg.analysis.group_psd`` (frequency-grid +
     channel-set guards).
     """
     conda:
@@ -1091,7 +1091,7 @@ rule run_psd:
 # reduced in-memory to a two-entry [power, ITPC] HDF5 — feed two group
 # rules; the split mirrors the ERP/PSD layers (ADR-007): per-subject QC
 # artifacts, group averages, per-contrast difference maps. All math lives
-# in p0ly_utils.analysis (DoD: no algorithm logic in rule scripts);
+# in p0ly_eeg.analysis (DoD: no algorithm logic in rule scripts);
 # single-subject cohorts run everything (difference is defined at n=1).
 rule tfr_subject:
     """Complex TFR -> [power, ITPC] for one subject's (timelock, condition).
@@ -1101,7 +1101,7 @@ rule tfr_subject:
     query from ``config.yaml group_aggregation.condition_splits`` (the
     reserved ``all_trials`` condition applies no query), and computes the
     single-trial complex TFR with ``config.yaml tfr`` settings — one
-    convolution (``p0ly_utils.analysis.tfr_epochs``) reduced immediately to
+    convolution (``p0ly_eeg.analysis.tfr_epochs``) reduced immediately to
     epoch-mean power (:func:`average_power`) and ITPC (:func:`itpc`); the
     large complex transient never touches disk. Fails loud on zero query
     matches (US-024 philosophy). The result keeps every channel (per-subject
@@ -1129,7 +1129,7 @@ rule tfr_group_average:
 
     Consumes the per-subject ``desc-tfr`` files (rule tfr_subject) and writes
     ``group_analysis/{timelock}/{condition}_desc-tfr_ave.h5`` (two-entry
-    AverageTFR HDF5) via ``p0ly_utils.analysis.group_tfr`` (mne.grand_average
+    AverageTFR HDF5) via ``p0ly_eeg.analysis.group_tfr`` (mne.grand_average
     with frequency-grid + channel-set guards), independently for the power
     and ITPC entries.
     """
@@ -1156,7 +1156,7 @@ rule run_tfr:
     Inputs are the two group-average ``desc-tfr_ave.h5`` files (rule
     tfr_group_average — two reads, not 2 x N subject re-reads). Each file's
     [power, ITPC] entries are subtracted element-wise with
-    ``p0ly_utils.analysis.tfr_difference`` (grid + channel guards) and
+    ``p0ly_eeg.analysis.tfr_difference`` (grid + channel guards) and
     written as a two-entry ``{condA}-vs-{condB}_desc-tfrdiff.h5``. No
     statistical test: subtraction is defined at n=1 (a single-subject
     difference is honest — group averages of one subject). Cluster
@@ -1198,7 +1198,7 @@ rule run_tfr_cluster:
     independent one-sample cluster permutation test runs over the
     (channel x freq x time) difference grid: power uses the raw difference
     (matching the persisted difference map); ITPC uses the Fisher-z
-    transform (:func:`p0ly_utils.analysis.itpc_z`) before differencing.
+    transform (:func:`p0ly_eeg.analysis.itpc_z`) before differencing.
     Statistic conventions, adjacency and the ClusterPermStats reuse mirror
     run_erp (US-010); the DAG omits these targets for cohorts with < 2
     subjects (see _TFR_CLUSTER_COHORTS).
@@ -1273,7 +1273,7 @@ rule connectivity_group_average:
     Consumes the per-subject ``desc-conn.npz`` archives (rule
     connectivity_subject) and writes
     ``group_analysis/{timelock}/{condition}_desc-conn_ave.npz`` (same archive
-    layout) via ``p0ly_utils.analysis.group_connectivity`` (equal-weight mean
+    layout) via ``p0ly_eeg.analysis.group_connectivity`` (equal-weight mean
     with channel-set + method + frequency-grid guards).
     """
     conda:
@@ -1303,7 +1303,7 @@ rule run_connectivity:
     connectivity_group_average — one read, not N subject re-reads). Each
     method's adjacency is band-averaged (``config.yaml connectivity.bands``,
     inclusive windows) and thresholded (``min_edge_weight`` noise floor), and
-    ``p0ly_utils.analysis.graph_metrics`` reports weighted clustering, the
+    ``p0ly_eeg.analysis.graph_metrics`` reports weighted clustering, the
     characteristic path length (largest connected component, effective
     distance ``1/weight``) and strength centrality as one long-format CSV
     ``(method, band, node)``. No statistical test: defined at n=1, mirroring
@@ -1335,7 +1335,7 @@ rule connectivity_contrast:
     contrast pair (rule connectivity_group_average; the contrast name is
     an unordered ``condition_splits`` pair ``first-vs-second``) and writes
     ``group_analysis/{timelock}/{cohort}/{contrast}_desc-conn_diff-graph.csv``
-    via ``p0ly_utils.analysis.difference_connectivity`` — the plain
+    via ``p0ly_eeg.analysis.difference_connectivity`` — the plain
     ``first - second`` condition difference, band-averaged and thresholded
     exactly like rule run_connectivity. Defined for any n (a difference of
     grand means, no statistics); the one-sample per-subject difference
@@ -1371,13 +1371,13 @@ rule connectivity_contrast:
 # --- Regression Analysis Layer (US-014) ---
 # Two rules: per-subject OLS beta maps, then the equal-subject-weight cohort
 # mean. Both are thin I/O shims — design-matrix construction, validation and
-# the solve live in p0ly_utils.analysis (DoD: no algorithm logic in scripts).
+# the solve live in p0ly_eeg.analysis (DoD: no algorithm logic in scripts).
 rule regression_subject:
     """OLS beta maps for one subject's timelock over all retained trials.
 
     Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
     (carrying trial metadata) and calls
-    ``p0ly_utils.analysis.regression_epochs`` with the ``config.yaml
+    ``p0ly_eeg.analysis.regression_epochs`` with the ``config.yaml
     regression:`` predictor declaration — ``signal_domain`` (voltage |
     power), ``continuous`` numeric columns and ``categorical``
     reference-coded columns. The library owns the design matrix, the
@@ -1415,7 +1415,7 @@ rule run_regression:
     Inputs are the cohort's per-subject ``desc-regression.npz`` archives
     (rule regression_subject, US-015 cohort membership) — never the original
     epochs, so the cohort value cannot become a pooled-trial estimate.
-    ``p0ly_utils.analysis.group_regression`` averages the subject maps with
+    ``p0ly_eeg.analysis.group_regression`` averages the subject maps with
     equal subject weight and guards domain, term order, reference levels,
     channel set and response grid. Output:
     ``group_analysis/{timelock}/{cohort}/desc-regression_ave.npz`` (same
@@ -1441,7 +1441,7 @@ rule run_regression:
 # --- Cross-Frequency Coupling Rules (US-027) ---
 # ADR-007 three-rule topology: per-subject maps (with their full surrogate
 # nulls) feed a descriptive cohort mean and the subject-unit contrast. All
-# math lives in p0ly_utils.analysis (DoD: no coupling/null/averaging logic in
+# math lives in p0ly_eeg.analysis (DoD: no coupling/null/averaging logic in
 # rule scripts); the scripts deserialize, call one library function, and save.
 rule cfc_subject:
     """PAC + n:m PPC maps for one subject's (timelock, condition).
@@ -1450,7 +1450,7 @@ rule cfc_subject:
     (carrying trial metadata), selects the condition via its ``metadata.eval``
     query from ``config.yaml group_aggregation.condition_splits`` (the
     reserved ``all_trials`` condition applies no query), and calls
-    ``p0ly_utils.analysis.estimate_cfc`` with ``config.yaml cfc`` grids,
+    ``p0ly_eeg.analysis.estimate_cfc`` with ``config.yaml cfc`` grids,
     bandwidths, ratios, surrogate count and seed. One call covers every
     configured method: PAC (tensorpac Gaussian-copula by default, all channels
     in one call) and each integer-ratio n:m phase-phase map (Hilbert phases,
@@ -1488,7 +1488,7 @@ rule cfc_group_average:
 
     Consumes the cohort's per-subject ``desc-cfc.npz`` archives (rule
     cfc_subject, US-015 cohort-restricted) and calls
-    ``p0ly_utils.analysis.group_cfc`` — arithmetic subject mean with
+    ``p0ly_eeg.analysis.group_cfc`` — arithmetic subject mean with
     channel-set / method / grid / valid-mask guards. Only **observed** maps are
     read: subject nulls and p-values never enter cohort math, so the archive
     carries no averaged p-values (``evidence_level="cohort_descriptive"``).
@@ -1516,7 +1516,7 @@ rule run_cfc:
 
     Inputs are the cohort's per-subject condition archives for both contrast
     arms (rule cfc_subject — the paired test needs the per-subject maps, not
-    the descriptive averages). ``p0ly_utils.analysis.cfc_condition_contrast``
+    the descriptive averages). ``p0ly_eeg.analysis.cfc_condition_contrast``
     builds per-subject ``first - second`` difference maps, flips each
     subject's whole difference map under the null (first subject fixed to
     +1 to remove global sign symmetry), takes the max |statistic| over each
@@ -1566,7 +1566,7 @@ rule run_cfc:
 
 # --- Variability Analysis Layer (US-029) ---
 # Across-trial variability per (subject, timelock, condition) -> cohort maps.
-# All math lives in p0ly_utils.analysis.variability (DoD: no algorithm logic
+# All math lives in p0ly_eeg.analysis.variability (DoD: no algorithm logic
 # in rule scripts); no statistics, so single-subject cohorts run everything.
 rule variability_subject:
     """Variability maps of one subject's (timelock, condition).
@@ -1575,7 +1575,7 @@ rule variability_subject:
     (carrying trial metadata), selects the condition via its ``metadata.eval``
     query from ``config.yaml group_aggregation.condition_splits`` (the
     reserved ``all_trials`` condition applies no query), and lets
-    ``p0ly_utils.analysis.variability_epochs`` compute every configured
+    ``p0ly_eeg.analysis.variability_epochs`` compute every configured
     domain/measure (``config.yaml variability``) in one read: voltage ->
     sample SD; power -> SD/Fano/CV from the TFR transform (``config.yaml
     tfr``, independent of analysis.run_tfr). Fails loud on zero query matches
@@ -1608,7 +1608,7 @@ rule run_variability:
     variability_subject, US-015 cohort-restricted), rebuilds one
     ``VariabilityResult`` per subject and domain, and writes
     ``group_analysis/{timelock}/{cohort}/{condition}_desc-variability_ave.npz``
-    via ``p0ly_utils.analysis.group_variability``: SD averages every subject,
+    via ``p0ly_eeg.analysis.group_variability``: SD averages every subject,
     Fano/CV average only the subjects whose mean was positive at that cell
     (equal weight, never pooled trials) and persist per-cell
     ``{domain}__{measure}__n_contributing`` counts next to ``n_subjects`` —
@@ -1640,7 +1640,7 @@ rule decoding_subject:
 
     Reads the US-017 ``sub-{subject}_{timelock}_desc-epo.fif.gz`` epochs
     (carrying the aligned trial metadata) and calls
-    ``p0ly_utils.analysis.decode_epochs`` with the ``config.yaml decoding``
+    ``p0ly_eeg.analysis.decode_epochs`` with the ``config.yaml decoding``
     settings. All label parsing, estimator construction, cross-validation and
     scoring live in the library — this script only serializes the result.
     Every subject is fit and scored on its own trials (no pooled input files);
@@ -1677,7 +1677,7 @@ rule run_decoding:
     Consumes the per-subject ``desc-decode.npz`` archives (rule
     decoding_subject — one read, not N subject re-reads) and writes
     ``group_analysis/{timelock}/{cohort}/{target}_desc-decode_ave.npz`` via
-    ``p0ly_utils.analysis.group_decoding``. Trials are never pooled across
+    ``p0ly_eeg.analysis.group_decoding``. Trials are never pooled across
     subjects: each subject contributes its already-cross-validated scores with
     one equal weight, independent of epoch counts. Archives must share target,
     mode, scoring, class order, chance level, time grid and score shape (the

@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.estimate_cfc`` apply the condition's
+metadata) and lets ``p0ly_eeg.analysis.estimate_cfc`` apply the condition's
 ``metadata.eval`` query (from ``config.yaml group_aggregation.condition_splits``;
 the reserved ``all_trials`` condition passes ``None``) before computing every
 configured method — PAC (tensorpac) and each integer-ratio n:m phase-phase
@@ -28,7 +28,7 @@ first statement (flagged during US-007).
 
 import mne
 import numpy as np
-from p0ly_utils.analysis import estimate_cfc
+from p0ly_eeg.analysis import estimate_cfc
 
 p = snakemake.params  # type: ignore[name-defined]
 settings = p.cfc

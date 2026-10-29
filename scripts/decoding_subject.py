@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.decode_epochs`` run the whole
+metadata) and lets ``p0ly_eeg.analysis.decode_epochs`` run the whole
 within-subject cross-validated decoding of one categorical metadata target
 (``config.yaml decoding`` settings passed via ``params:``). No label parsing,
 estimator construction, CV, or scoring logic lives here. Fails loud on invalid
@@ -23,7 +23,7 @@ first statement (flagged during US-007).
 
 import mne
 import numpy as np
-from p0ly_utils.analysis import decode_epochs
+from p0ly_eeg.analysis import decode_epochs
 
 p = snakemake.params  # type: ignore[name-defined]
 

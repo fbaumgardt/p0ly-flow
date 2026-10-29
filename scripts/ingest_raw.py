@@ -4,8 +4,8 @@ Thin wrapper per p0ly-flow/AGENTS.md: the manifest rows for the subject
 (``snakemake.params.rows`` — ``(segment, source)`` tuples, ordered by
 acquisition) drive per-segment ``source`` construction exactly as ADR-005
 (amended) prescribes; each segment is loaded via
-:func:`p0ly_utils.io.load_raw` and all segments are concatenated via
-:func:`p0ly_utils.merge.merge_recordings` (inserts ``BAD_break`` annotations at
+:func:`p0ly_eeg.io.load_raw` and all segments are concatenated via
+:func:`p0ly_eeg.merge.merge_recordings` (inserts ``BAD_break`` annotations at
 boundaries, validates channel/sfreq consistency). The merged recording is saved
 to ``sub-{subject}_desc-raw.fif.gz`` (SCHEMA §6). No algorithm logic, no
 hardcoded paths — the source list, output path, and config all arrive via
@@ -28,7 +28,7 @@ first statement.
 """
 
 from mne_bids import BIDSPath
-from p0ly_utils import load_raw, merge_recordings
+from p0ly_eeg import load_raw, merge_recordings
 
 fmt = snakemake.params.fmt
 montage = snakemake.params.montage

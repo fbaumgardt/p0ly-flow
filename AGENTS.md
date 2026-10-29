@@ -11,7 +11,7 @@ Cross-project sync workflow: see root [AGENTS.md](../AGENTS.md) co-development p
 ## 1. Core Philosophy & Architectural Boundary
 
 1. **Orchestration only** — file system tracking, DAG topology, job parallelization, wildcard expansion, configuration deployment
-2. **The p0ly-eeg boundary (critical)** — no raw signal processing, filtering, or MNE manipulation here. Rule scripts import from `p0ly_utils` and call library functions. Rules are wrappers; `p0ly-eeg` is the brain.
+2. **The p0ly-eeg boundary (critical)** — no raw signal processing, filtering, or MNE manipulation here. Rule scripts import from `p0ly_eeg` and call library functions. Rules are wrappers; `p0ly-eeg` is the brain.
 
 Responsibilities of this repository:
 
@@ -37,7 +37,7 @@ Translate [PRD_Core_App.md](../scrum/04_Specs/PRD_Core_App.md) into an optimized
 ## 3. Snakemake Conventions & Abstraction Hierarchy
 
 1. **Rule directives over script logic** — declare `input:`, `output:`, `params:`, `resources:`, `threads:`, `log:`
-2. **`script:` over `shell:`** — Python scripts with direct `p0ly_utils` imports; reserve `shell:` for external CLIs
+2. **`script:` over `shell:`** — Python scripts with direct `p0ly_eeg` imports; reserve `shell:` for external CLIs
 3. **`params:` over hardcoded imports** — route tunable values through `params:` from `config.yaml`
 4. **Wildcards over concrete filenames** — `{subject}`, `{session}`, `{cohort}`, `{condition}`
 5. **`checkpoint:` for dynamic DAG nodes** — when downstream count/identity is unknown at parse time
@@ -96,10 +96,10 @@ When p0ly-eeg is updated:
 
 `p0ly-flow` is currently empty. Create in this order:
 
-1. `pyproject.toml` — Snakemake + p0ly-eeg (`p0ly-utils`) dependency, uv-managed
+1. `pyproject.toml` — Snakemake + p0ly-eeg (`p0ly-eeg`) dependency, uv-managed
 2. `config.yaml` — default config matching [SCHEMA](../scrum/04_Specs/SCHEMA.md)
 3. `Snakefile` — `rule all` + at least one placeholder rule
-4. `scripts/` — one thin wrapper importing from `p0ly_utils`
+4. `scripts/` — one thin wrapper importing from `p0ly_eeg`
 5. Verify: `uv run snakemake -n` and `uv run snakemake --lint` pass
 
 See user story [US-006_pipeline-bootstrap](../scrum/01_Backlog/US-006_pipeline-bootstrap.md).

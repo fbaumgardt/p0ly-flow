@@ -3,7 +3,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.tfr_epochs`` apply the condition's
+metadata) and lets ``p0ly_eeg.analysis.tfr_epochs`` apply the condition's
 ``metadata.eval`` query (from ``config.yaml
 group_aggregation.condition_splits``; the reserved ``all_trials`` condition
 passes ``None``) before the single Morlet/multitaper convolution with
@@ -22,7 +22,7 @@ first statement (flagged during US-007).
 
 import mne
 from mne.time_frequency import write_tfrs
-from p0ly_utils.analysis import average_power, freq_grid, itpc, tfr_epochs
+from p0ly_eeg.analysis import average_power, freq_grid, itpc, tfr_epochs
 
 p = snakemake.params  # type: ignore[name-defined]
 tfr_settings = p.tfr

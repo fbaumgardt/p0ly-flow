@@ -3,7 +3,7 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads the cohort's per-subject
 condition TFR files for the contrast's two arms (rule inputs, expanded by
 Snakemake), EEG-picks and stacks them, and runs an independent one-sample
-cluster permutation test per product via ``p0ly_utils.analysis`` — raw power
+cluster permutation test per product via ``p0ly_eeg.analysis`` — raw power
 difference for the power entry, Fisher-z-transformed difference
 (:func:`itpc_z`) for the ITPC entry. All math — the difference design, the
 3-D (channel x freq x time) adjacency, threshold selection, the permutation
@@ -28,7 +28,7 @@ first statement (flagged during US-007).
 import numpy as np
 import pandas as pd
 from mne.time_frequency import read_tfrs
-from p0ly_utils.analysis import eeg_adjacency, itpc_z, tfr_cluster_permutation
+from p0ly_eeg.analysis import eeg_adjacency, itpc_z, tfr_cluster_permutation
 
 p = snakemake.params
 cond_first, cond_second = p.conditions

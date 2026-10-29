@@ -3,8 +3,8 @@
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-condition
 ``desc-conn.npz`` archive (rule connectivity_subject — Snakemake expands the
 subject set, no Python subject loop here), rebuilds
-``p0ly_utils.analysis.ConnectivityMatrices`` from it, and calls
-``p0ly_utils.analysis.group_connectivity`` (equal-weight cross-subject mean
+``p0ly_eeg.analysis.ConnectivityMatrices`` from it, and calls
+``p0ly_eeg.analysis.group_connectivity`` (equal-weight cross-subject mean
 with channel-set + method + frequency-grid guards), writing
 ``group_analysis/{timelock}/{condition}_desc-conn_ave.npz`` in the same
 archive layout (one adjacency array per method + ``ch_names`` + ``freqs``).
@@ -19,7 +19,7 @@ first statement (flagged during US-007).
 """
 
 import numpy as np
-from p0ly_utils.analysis import ConnectivityMatrices, group_connectivity
+from p0ly_eeg.analysis import ConnectivityMatrices, group_connectivity
 
 methods = list(snakemake.params.methods)  # type: ignore[name-defined]
 

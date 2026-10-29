@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: reads every subject's per-condition
 spectrum (rule psd_subject) plus the grand-average spectrum (rule
-psd_group_average), then calls ``p0ly_utils.analysis`` helpers —
+psd_group_average), then calls ``p0ly_eeg.analysis`` helpers —
 ``fit_aperiodic_channels`` (specparam fixed mode) and ``band_powers`` — and
 writes the two flat CSVs. No math here: fitting, band masks, and
 normalization live in the library.
@@ -23,7 +23,7 @@ from pathlib import Path
 
 import pandas as pd
 from mne.time_frequency import Spectrum, read_spectrum
-from p0ly_utils.analysis import band_powers, fit_aperiodic_channels
+from p0ly_eeg.analysis import band_powers, fit_aperiodic_channels
 
 p = snakemake.params
 condition = str(p.condition)

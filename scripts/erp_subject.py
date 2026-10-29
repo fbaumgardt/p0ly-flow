@@ -2,7 +2,7 @@
 
 Pure I/O shim per p0ly-flow/AGENTS.md: loads the US-017 timelock epochs
 (``sub-{subject}_{timelock}_desc-epo.fif.gz``, carrying the aligned trial
-metadata) and lets ``p0ly_utils.analysis.average_epochs`` apply the
+metadata) and lets ``p0ly_eeg.analysis.average_epochs`` apply the
 condition's ``metadata.eval`` query (from ``config.yaml
 group_aggregation.condition_splits``; the reserved ``all_trials`` condition
 passes ``None``) before averaging. Fails loud on zero epochs or zero query
@@ -15,7 +15,7 @@ first statement (flagged during US-007).
 """
 
 import mne
-from p0ly_utils.analysis import average_epochs
+from p0ly_eeg.analysis import average_epochs
 
 p = snakemake.params
 
