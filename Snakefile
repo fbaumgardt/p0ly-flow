@@ -1,7 +1,7 @@
 # p0ly-flow Snakemake DAG
 
 # --- Config ---
-configfile: "config.yaml"
+configfile: "configs/default.yaml"
 
 # --- Config-derived path roots (no hardcoded directories in rules) ---
 _DATA_DIR = config["project_settings"]["data_directory"].rstrip("/")
@@ -21,11 +21,37 @@ _META = config["metadata"]
 # The timelock set is derived from the experiment spec itself
 # (``ExperimentSpec.timelocks`` keys) so no timelock literals live in the
 # Snakefile. ``p0ly_eeg`` is already a dependency, so the spec is loaded at
-# DAG-parse time.
+# DAG-parse time. The timelock keys are cross-checked against
+# ``epoching.intervals`` at parse time (ST-007 AC-4, ADR-0008): a config key
+# that names no spec timelock fails the parse; a spec timelock with no
+# configured interval is dropped from the epoch expansion with a warning
+# (running a subset of the spec's timelocks is legitimate). The library's
+# ``validate_intervals`` call at the epoch boundary stays as the second guard.
 from p0ly_eeg.analysis import freq_grid
 from p0ly_eeg.metadata import ExperimentSpec
+import sys
 
-_TIMELOCKS = list(ExperimentSpec.from_yaml(_META["experiment_spec"]).timelocks.keys())
+_SPEC_TIMELOCKS = list(
+    ExperimentSpec.from_yaml(_META["experiment_spec"]).timelocks.keys()
+)
+_INTERVALS = config["epoching"]["intervals"]
+_CONFIG_EXTRA = [k for k in _INTERVALS if k not in _SPEC_TIMELOCKS]
+if _CONFIG_EXTRA:
+    raise ValueError(
+        f"config epoching.intervals names {_CONFIG_EXTRA} but the experiment "
+        f"spec {_META['experiment_spec']!r} declares timelocks "
+        f"{_SPEC_TIMELOCKS} (ADR-0008)"
+    )
+# `warnings.warn` is swallowed by Snakemake's parser; a stderr write survives
+# every Snakemake version and frontend.
+for _t in _SPEC_TIMELOCKS:
+    if _t not in _INTERVALS:
+        sys.stderr.write(
+            f"Warning: spec {_META['experiment_spec']} declares timelock "
+            f"{_t!r} but epoching.intervals configures none — epoch jobs for "
+            "it are omitted from this run\n"
+        )
+_TIMELOCKS = [t for t in _SPEC_TIMELOCKS if t in _INTERVALS]
 
 # Optional ICA output path (declared as a plain value, not a function —
 # Snakemake only allows callables for `input:`, not `output:`). Empty list
@@ -836,7 +862,7 @@ rule epoch:
 
     Cuts ``mne.Epochs`` from the timelock's annotation events using the
     analysis-run ``intervals[timelock]`` -> ``(tmin, tmax)`` (from
-    ``config.yaml epoching.intervals``, ADR-006) and the shared ``baseline``
+    ``config.yaml epoching.intervals``, ADR-0008) and the shared ``baseline``
     (``config.yaml epoching.baseline``), then aligns the US-016 by-trial
     metadata TSV to those epochs via
     ``p0ly_eeg.epoching.epoch_with_metadata``. Mismatches (extra epochs,
@@ -853,9 +879,11 @@ rule epoch:
       - sub-{subject}_{timelock}_desc-epo.fif.gz : epochs with aligned metadata.
       - sub-{subject}_{timelock}_excluded_trials.csv : mismatch log.
 
-    The timelock set comes from the experiment spec (``_TIMELOCKS`` above),
-    not config literals; per-timelock ``(tmin, tmax)`` come from
-    ``config.yaml epoching.intervals`` (ADR-006: windows are analysis-run
+    The timelock set comes from the experiment spec (``_TIMELOCKS`` above,
+    filtered to timelocks that ``epoching.intervals`` configures at parse
+    time — ST-007 AC-4), not config literals; per-timelock ``(tmin, tmax)``
+    come from
+    ``config.yaml epoching.intervals`` (ADR-0008: windows are analysis-run
     config; the spec owns the event-code map only).  No segmentation/
     alignment math here -- algorithms live in p0ly-eeg.
     """
