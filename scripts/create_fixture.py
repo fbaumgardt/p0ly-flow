@@ -2,7 +2,7 @@
 
 Standalone dev CLI — not a Snakemake `script:` (it has no `snakemake` object),
 same status as ``scripts/create_tsv.py``. Run it once to produce the practice
-recording used by ``config.test.yaml``:
+recording used by ``configs/test.yaml``:
 
     uv run python scripts/create_fixture.py
 

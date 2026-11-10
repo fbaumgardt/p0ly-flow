@@ -17,7 +17,7 @@ Cohorts expand from `data/metadata/participants.tsv`; conditions from `group_agg
 
 ## Main analyses
 
-Enable in `config.yaml` under `analysis:`; parameters live in the matching `config.yaml` block.
+Enable in `configs/default.yaml` under `analysis:`; parameters live in the matching `configs/default.yaml` block.
 
 | Analysis | Rules | Output |
 | :--- | :--- | :--- |
@@ -32,7 +32,7 @@ Enable in `config.yaml` under `analysis:`; parameters live in the matching `conf
 
 Statistics are defined per their group level: cluster-permutation and CFC contrast rules need the configured subject cohorts (CFC contrasts are omitted loudly below 2 subjects — exact sign flips give an n=2 p-value floor of 1/3); grand averages, difference graphs, PSD/TFR summaries, and CFC descriptive means are defined for any n.
 
-CFC artifacts (compressed `.npz`, `config.yaml cfc` block):
+CFC artifacts (compressed `.npz`, `configs/default.yaml cfc` block):
 
 - `sub-{subject}/sub-{subject}_{timelock}_{condition}_desc-cfc.npz` — per method key (`pac`, `ppc_2x1`, ...) `__observed`, `__null` (the full surrogate distribution, retained on purpose), `__p_values`, `__valid_mask`; `evidence_level="subject"` (uncorrected subject-level evidence, not a cohort claim).
 - `group_analysis/{timelock}/{cohort}/{condition}_desc-cfc_ave.npz` — per method `__mean` + `__valid_mask`; no averaged p-values (`evidence_level="cohort_descriptive"`).
@@ -40,14 +40,14 @@ CFC artifacts (compressed `.npz`, `config.yaml cfc` block):
 
 Regression is explanatory within-subject OLS, not decoding or inference: one model per (subject, timelock) on all retained trials. Predictors are declared in `regression:` (`signal_domain: voltage | power`, `continuous: [...]`, `categorical: [...]` — at least one non-empty when `analysis.run_regression` is true); the power domain reuses the `tfr:` block for the transform even when `analysis.run_tfr` is false. There is no condition wildcard and no cohort-level statistic — cohort files are equal-subject-weight means of the per-subject beta maps.
 
-Variability (`analysis.run_variability`) is selected per domain in `config.yaml variability:` — omit a domain to disable it (`voltage: {measures: [sd]}` only, power only, or both). The power domain reuses the `tfr:` settings independently of `analysis.run_tfr`, so power variability needs no TFR artifacts. Ratios are `NaN` where mean power is zero; use the `power__positive_mean` mask (subject files) and the `*__n_contributing` counts (group files, next to `n_subjects`) rather than reading `NaN` as zero.
+Variability (`analysis.run_variability`) is selected per domain in `configs/default.yaml variability:` — omit a domain to disable it (`voltage: {measures: [sd]}` only, power only, or both). The power domain reuses the `tfr:` settings independently of `analysis.run_tfr`, so power variability needs no TFR artifacts. Ratios are `NaN` where mean power is zero; use the `power__positive_mean` mask (subject files) and the `*__n_contributing` counts (group files, next to `n_subjects`) rather than reading `NaN` as zero.
 
 Statistics are defined per their group level: cluster-permutation rules need the configured subject cohorts; grand averages, difference graphs, PSD/TFR summaries are defined for any n.
 
 ## Usage
 
 ```bash
-# 1. Configure: subjects + data paths + analysis toggles in config.yaml
+# 1. Configure: subjects + data paths + analysis toggles in configs/default.yaml
 #    (raw data under data/raw/sub-{id}/; participants.tsv lists cohorts)
 
 # 2. Install (resolves p0ly-utils from the sibling p0ly-eeg via path source)
@@ -58,7 +58,7 @@ uv run snakemake -n
 uv run snakemake --cores all           # or: --profile local
 
 # Smoke test (2 synthetic subjects, < 60 s)
-uv run snakemake --configfile config.test.yaml --cores all
+uv run snakemake --configfile configs/test.yaml --cores all
 ```
 
 Regenerate the ingestion manifest after adding recordings:

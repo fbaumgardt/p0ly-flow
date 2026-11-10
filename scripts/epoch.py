@@ -25,7 +25,7 @@ raw = mne.io.read_raw(snakemake.input.raw, preload=True)  # type: ignore[name-de
 metadata = pd.read_csv(snakemake.input.metadata, sep="\t")  # type: ignore[name-defined]
 spec = ExperimentSpec.from_yaml(p.spec_path)
 
-# ADR-006: epoch windows come from config epoching.intervals (analysis-run
+# ADR-0008: epoch windows come from config epoching.intervals (analysis-run
 # config), the spec carries the timelock event-code map only. Cross-check the
 # keys asymmetrically: warn on spec-extra (legitimate skip), error on
 # config-extra (likely typo).

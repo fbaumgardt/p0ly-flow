@@ -76,7 +76,6 @@ Translate [PRD_Core_App.md](../scrum/04_Specs/PRD_Core_App.md) into an optimized
 
 ### Future (when infrastructure exists)
 
-- Maintain `config.schema.yaml` (JSON Schema)
 - Run `uv run snakemake --config-schema validate` before committing
 - Maintain `config.test.yaml` smoke test (1–2 subjects, under 60 seconds)
 
@@ -120,3 +119,10 @@ See user story [US-006_pipeline-bootstrap](../scrum/01_Backlog/US-006_pipeline-b
 - Unit tests for branching logic in rule scripts via `uv run pytest tests/`
 
 Verification gates: [DoD](../scrum/04_Specs/DoD.md).
+
+<!-- exon:start -->
+## Specs and plans (pi-exon)
+Intent, specs, plans and tasks live in `.exon/`. Load the `exon` skill before reading or changing anything there.
+- Never approve anything yourself and never edit approved artifacts; file a change request with `/exon-change`.
+- Never edit acceptance tests or frozen fixtures while implementing; run the exon validator after changing `.exon/`.
+<!-- exon:end -->

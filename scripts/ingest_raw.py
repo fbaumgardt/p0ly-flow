@@ -1,15 +1,14 @@
-"""Ingest and merge a subject's raw recording segments (US-007 / US-009).
+"""Ingest and merge a subject's raw recording segments.
 
 Thin wrapper per p0ly-flow/AGENTS.md: the manifest rows for the subject
 (``snakemake.params.rows`` — ``(segment, source)`` tuples, ordered by
-acquisition) drive per-segment ``source`` construction exactly as ADR-005
-(amended) prescribes; each segment is loaded via
-:func:`p0ly_eeg.io.load_raw` and all segments are concatenated via
-:func:`p0ly_eeg.merge.merge_recordings` (inserts ``BAD_break`` annotations at
-boundaries, validates channel/sfreq consistency). The merged recording is saved
-to ``sub-{subject}_desc-raw.fif.gz`` (SCHEMA §6). No algorithm logic, no
-hardcoded paths — the source list, output path, and config all arrive via
-``snakemake``.
+acquisition) drive per-segment ``source`` construction; each segment is
+loaded via :func:`p0ly_eeg.io.load_raw` and all segments are concatenated
+via :func:`p0ly_eeg.merge.merge_recordings` (inserts ``BAD_break`` anno-
+tations at boundaries, validates channel/sfreq consistency). The merged
+recording is saved to ``sub-{subject}_desc-raw.fif.gz`` (SCHEMA §6). No
+algorithm logic, no hardcoded paths — the source list, output path, and
+config all arrive via ``snakemake``.
 
 Channel types + montage are fixed on every segment by ``load_raw`` and
 preserved by ``mne.concatenate_raws`` (info taken from segment 0; the merge

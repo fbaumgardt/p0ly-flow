@@ -3,10 +3,10 @@
 
 project_settings:
   experiment_name: "p0ly_bootstrap"
-  input_format: "BrainVision" # BrainVision | BIDS
-  data_directory: "data/raw/" # BV: root with sub-{id}/ dirs; BIDS: BIDS dataset root
+  input_format: "BrainVision"
+  data_directory: "data/raw"
   output_directory: "data/derivatives/"
-  task: "rest" # task label: embedded in BV filenames + BIDS entity; null = no task axis (manifest catalogues every recording)
+  task: "dmss"
   montage: "easycap-M1" # MNE builtin montage applied on ingestion when the recording lacks one; null = never apply
 
 subjects:
@@ -19,22 +19,21 @@ ingestion:
   # Hand-authored for the bootstrap; regenerate via `scripts/create_tsv.py`.
   manifest: "metadata/manifest.tsv"
 
+  exclude: ["/home/fbaumgardt/Code/p0ly/p0ly-flow/data/raw/sub-001/sub-001_task-rest.vhdr"]
 preprocessing:
-  # All keys optional — omit a key to skip that step (see SCHEMA §preprocessing / ADR-004).
+  # All keys optional — omit a key to skip that step.
   l_freq: 1.0
   h_freq: 100.0
   bad_channel_z_thresh: 2.5
   interval_reject_z_thresh: 3.0
   interval_window_ms: 500
   ica_strategy: "mne-icalabel" # find_bads_eog | mne-icalabel
-  icalabel_threshold: 0.75 # sliding-window peak-to-peak Z-score (SCHEMA §preprocessing)
-  ica_fit_window: null # null = full recording; float = centred N-seconds window; [tmin, tmax] = explicit window (SCHEMA §preprocessing). Crop is fit-only — the cleaned output spans the full recording.
+  icalabel_threshold: 0.75 # sliding-window peak-to-peak Z-score
+  ica_fit_window: null # null = full recording; float = centred N-seconds window; [tmin, tmax] = explicit window
 
 epoching:
-  # Per-timelock (tmin, tmax) epoch windows — analysis-run config (ADR-006).
-  # The spec (metadata.experiment_spec) owns the timelock event-code map only;
-  # keys here MUST match the spec's timelock keys (validate_intervals errors on
-  # a config-side typo, warns if the spec declares a timelock not run here).
+  # Per-timelock (tmin, tmax) epoch windows.
+  # Keys here MUST match the spec's timelock keys.
   intervals:
     stim: [-0.2, 1.2]
     prob: [-0.2, 1.2]
@@ -44,12 +43,11 @@ epoching:
   baseline: [-0.2, 0.0]
 
 metadata:
-  # SCHEMA §4: path to the experiment metadata YAML spec. Specs live in
-  # metadata/specs/{experiment}.yaml.
+  # Experiment metadata specification. Specs usually live in metadata/specs/{experiment}.yaml.
   experiment_spec: "metadata/specs/dmss.yaml"
-  # Optional companion CSV aligned positionally to trials (see ExperimentSpec.csv_columns).
+  # Optional metadata CSV aligned with trials (see ExperimentSpec.csv_columns).
   csv_columns: null
-  # One row per selection for experiments with ExperimentSpec.trial_expander (e.g. IGT).
+  # Use ExperimentSpec.trial_expander for multiple time-locks per trial (e.g. in IGT)?
   expand_trials: false
 
 group_aggregation:
