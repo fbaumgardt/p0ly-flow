@@ -9,9 +9,6 @@ project_settings:
   task: "dmss"
   montage: "easycap-M1" # MNE builtin montage applied on ingestion when the recording lacks one; null = never apply
 
-subjects:
-  - "001" # Bootstrap: single placeholder subject (bare ID)
-
 ingestion:
   # SCHEMA §4 / ADR-005 §3 amendment (US-009): manifest-driven multi-segment
   # ingestion. One row per recording segment; the merge_recordings rule

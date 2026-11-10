@@ -45,10 +45,6 @@ project_settings:
   task: "dmss"
   montage: "easycap-M1"
 
-subjects:
-  - "001"
-  - "002"
-
 ingestion:
   manifest: "metadata/manifest.test.tsv"
 

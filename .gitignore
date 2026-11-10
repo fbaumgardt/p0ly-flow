@@ -13,3 +13,6 @@ __pycache__/
 data/*
 !data/raw/
 logs/
+
+# Local agent settings
+.pi/

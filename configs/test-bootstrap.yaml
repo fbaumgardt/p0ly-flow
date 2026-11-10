@@ -1,0 +1,14 @@
+# Bootstrap-era test config (ST-001 AC-4): all analysis families off, so the
+# planned DAG requires no analysis-family rules. Pass it AFTER the base test
+# config to override the toggles:
+#
+#   uv run snakemake -n --configfile configs/test.yaml configs/test-bootstrap.yaml
+analysis:
+  run_erp: false
+  run_psd: false
+  run_tfr: false
+  run_connectivity: false
+  run_regression: false
+  run_cfc: false
+  run_variability: false
+  run_decoding: false

@@ -47,7 +47,7 @@ Statistics are defined per their group level: cluster-permutation rules need the
 ## Usage
 
 ```bash
-# 1. Configure: subjects + data paths + analysis toggles in configs/default.yaml
+# 1. Generate the manifest (the subject register) + set data paths and
 #    (raw data under data/raw/sub-{id}/; participants.tsv lists cohorts)
 
 # 2. Install (resolves p0ly-utils from the sibling p0ly-eeg via path source)
